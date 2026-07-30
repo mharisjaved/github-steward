@@ -273,3 +273,166 @@ def test_two_connections_cannot_both_acquire_the_same_lease(
         assert row.lease_owner in {"worker-1", "worker-2"}
         assert row.lease_expires_at == NOW + timedelta(minutes=5)
         assert row.version == 1
+
+
+def test_lease_release_requires_matching_token_and_version_and_clears_fields(
+    postgres_engine: Engine,
+) -> None:
+    delivery_id = uuid4()
+    work_id = uuid4()
+    lease_token = uuid4()
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            delivery_inbox.insert().values(
+                **_delivery_values(
+                    delivery_id=delivery_id,
+                    provider_delivery_id="guarded-release",
+                    digest=DIGEST_A,
+                )
+            )
+        )
+        connection.execute(
+            work_record.insert().values(
+                **_work_values(work_id=work_id, delivery_id=delivery_id),
+                lease_owner="worker-1",
+                lease_token=lease_token,
+                lease_expires_at=NOW + timedelta(minutes=5),
+                version=1,
+            )
+        )
+
+        def release(*, token: object, version: int) -> int:
+            return connection.execute(
+                work_record.update()
+                .where(
+                    work_record.c.work_record_id == work_id,
+                    work_record.c.lease_token == token,
+                    work_record.c.version == version,
+                )
+                .values(
+                    lease_owner=None,
+                    lease_token=None,
+                    lease_expires_at=None,
+                    version=work_record.c.version + 1,
+                    updated_at=NOW,
+                )
+            ).rowcount
+
+        assert release(token=uuid4(), version=1) == 0
+        assert release(token=lease_token, version=0) == 0
+        assert release(token=lease_token, version=1) == 1
+        assert release(token=lease_token, version=1) == 0
+
+        released = connection.execute(
+            sa.select(
+                work_record.c.lease_owner,
+                work_record.c.lease_token,
+                work_record.c.lease_expires_at,
+                work_record.c.version,
+            ).where(work_record.c.work_record_id == work_id)
+        ).one()
+        assert released.lease_owner is None
+        assert released.lease_token is None
+        assert released.lease_expires_at is None
+        assert released.version == 2
+
+        replacement_token = uuid4()
+        assert (
+            connection.execute(
+                work_record.update()
+                .where(
+                    work_record.c.work_record_id == work_id,
+                    work_record.c.lease_token.is_(None),
+                    work_record.c.version == 2,
+                )
+                .values(
+                    lease_owner="worker-2",
+                    lease_token=replacement_token,
+                    lease_expires_at=NOW + timedelta(minutes=10),
+                    version=3,
+                    updated_at=NOW,
+                )
+            ).rowcount
+            == 1
+        )
+        assert release(token=lease_token, version=3) == 0
+        assert release(token=replacement_token, version=3) == 1
+
+        released_after_ownership_change = connection.execute(
+            sa.select(
+                work_record.c.lease_owner,
+                work_record.c.lease_token,
+                work_record.c.lease_expires_at,
+                work_record.c.version,
+            ).where(work_record.c.work_record_id == work_id)
+        ).one()
+        assert released_after_ownership_change.lease_owner is None
+        assert released_after_ownership_change.lease_token is None
+        assert released_after_ownership_change.lease_expires_at is None
+        assert released_after_ownership_change.version == 4
+
+
+def test_lease_expiry_reacquisition_uses_explicit_deterministic_cas(
+    postgres_engine: Engine,
+) -> None:
+    delivery_id = uuid4()
+    work_id = uuid4()
+    original_token = uuid4()
+    expiry = NOW + timedelta(minutes=5)
+    replacement_token = uuid4()
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            delivery_inbox.insert().values(
+                **_delivery_values(
+                    delivery_id=delivery_id,
+                    provider_delivery_id="deterministic-expiry",
+                    digest=DIGEST_A,
+                )
+            )
+        )
+        connection.execute(
+            work_record.insert().values(
+                **_work_values(work_id=work_id, delivery_id=delivery_id),
+                lease_owner="worker-1",
+                lease_token=original_token,
+                lease_expires_at=expiry,
+                version=1,
+            )
+        )
+
+        def reacquire(*, at: datetime, expected_version: int) -> int:
+            return connection.execute(
+                work_record.update()
+                .where(
+                    work_record.c.work_record_id == work_id,
+                    work_record.c.version == expected_version,
+                    work_record.c.lease_expires_at <= at,
+                )
+                .values(
+                    lease_owner="worker-2",
+                    lease_token=replacement_token,
+                    lease_expires_at=at + timedelta(minutes=5),
+                    version=work_record.c.version + 1,
+                    updated_at=at,
+                )
+            ).rowcount
+
+        assert reacquire(at=expiry - timedelta(microseconds=1), expected_version=1) == 0
+        assert reacquire(at=expiry, expected_version=0) == 0
+        assert reacquire(at=expiry, expected_version=1) == 1
+        assert reacquire(at=expiry, expected_version=1) == 0
+
+        reacquired = connection.execute(
+            sa.select(
+                work_record.c.lease_owner,
+                work_record.c.lease_token,
+                work_record.c.lease_expires_at,
+                work_record.c.version,
+            ).where(work_record.c.work_record_id == work_id)
+        ).one()
+        assert reacquired.lease_owner == "worker-2"
+        assert reacquired.lease_token == replacement_token
+        assert reacquired.lease_expires_at == expiry + timedelta(minutes=5)
+        assert reacquired.version == 2
+
+    assert "external_retry_authority" not in work_record.c

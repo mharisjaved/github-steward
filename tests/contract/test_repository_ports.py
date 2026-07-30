@@ -4,18 +4,33 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
+import operator
+from collections.abc import Callable, Mapping, MutableMapping
+from datetime import UTC, datetime
+from typing import cast
 
+import pytest
+
+from github_steward.domain.canonical import Digest
 from github_steward.ports.persistence import (
+    AnalysisViewId,
     AnalysisViewRecord,
     AnalysisViewRepository,
+    AuditEventId,
     AuditEventRecord,
     AuditEventRepository,
     CanonicalObservationRecord,
     CanonicalObservationRepository,
     CurrentObservationPointerRepository,
     InboxWorkRepository,
+    ObservationVersionId,
     UnitOfWork,
     WorkLeaseRepository,
+)
+
+NOW = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
+type ImmutableRecord = (
+    CanonicalObservationRecord | AnalysisViewRecord | AuditEventRecord
 )
 
 
@@ -48,3 +63,107 @@ def test_immutable_port_records_are_frozen_values() -> None:
     ):
         assert dataclasses.is_dataclass(record)
         assert vars(record)["__dataclass_params__"].frozen
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        CanonicalObservationRecord(
+            version_id=ObservationVersionId("observation-1"),
+            entity_kind="pull_request",
+            entity_id="1",
+            schema_id="github.pull-request",
+            schema_version=1,
+            observed_at=NOW,
+            payload={"items": [{"value": 1}]},
+            digest=Digest("a" * 64),
+        ),
+        AnalysisViewRecord(
+            view_id=AnalysisViewId("view-1"),
+            schema_id="github.analysis",
+            schema_version=1,
+            payload={"items": [{"value": 1}]},
+            digest=Digest("b" * 64),
+            observation_versions=(
+                ("pull_request", ObservationVersionId("observation-1")),
+            ),
+        ),
+        AuditEventRecord(
+            event_id=AuditEventId("event-1"),
+            event_kind="observation.recorded",
+            actor_or_authority_id="github",
+            occurred_at=NOW,
+            schema_id="github.audit",
+            schema_version=1,
+            payload={"items": [{"value": 1}]},
+            digest=Digest("c" * 64),
+        ),
+    ],
+    ids=["canonical-observation", "analysis-view", "audit-event"],
+)
+def test_immutable_port_record_payloads_reject_nested_mutation(
+    record: ImmutableRecord,
+) -> None:
+    payload = record.payload
+    assert isinstance(payload, Mapping)
+    with pytest.raises(TypeError):
+        operator.setitem(cast(MutableMapping[str, object], payload), "items", ())
+    items = payload["items"]
+    assert isinstance(items, tuple)
+    nested = items[0]
+    assert isinstance(nested, Mapping)
+    with pytest.raises(TypeError):
+        operator.setitem(cast(MutableMapping[str, object], nested), "value", 2)
+
+
+@pytest.mark.parametrize(
+    "record_factory",
+    [
+        lambda payload: CanonicalObservationRecord(
+            version_id=ObservationVersionId("observation-2"),
+            entity_kind="pull_request",
+            entity_id="2",
+            schema_id="github.pull-request",
+            schema_version=1,
+            observed_at=NOW,
+            payload=payload,
+            digest=Digest("d" * 64),
+        ),
+        lambda payload: AnalysisViewRecord(
+            view_id=AnalysisViewId("view-2"),
+            schema_id="github.analysis",
+            schema_version=1,
+            payload=payload,
+            digest=Digest("e" * 64),
+            observation_versions=(),
+        ),
+        lambda payload: AuditEventRecord(
+            event_id=AuditEventId("event-2"),
+            event_kind="observation.recorded",
+            actor_or_authority_id="github",
+            occurred_at=NOW,
+            schema_id="github.audit",
+            schema_version=1,
+            payload=payload,
+            digest=Digest("f" * 64),
+        ),
+    ],
+    ids=["canonical-observation", "analysis-view", "audit-event"],
+)
+def test_immutable_port_records_copy_caller_owned_payload(
+    record_factory: Callable[[object], ImmutableRecord],
+) -> None:
+    source = {"items": [{"value": 1}]}
+    record = record_factory(source)
+
+    source["items"][0]["value"] = 2
+    source["items"].append({"value": 3})
+
+    payload = record.payload
+    assert isinstance(payload, Mapping)
+    items = payload["items"]
+    assert isinstance(items, tuple)
+    nested = items[0]
+    assert isinstance(nested, Mapping)
+    assert nested["value"] == 1
+    assert len(items) == 1

@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import operator
+from collections.abc import Mapping, MutableMapping
+from typing import cast
+
+import pytest
 
 from github_steward.adapters.canonicalization.rfc8785 import (
     canonicalize,
@@ -63,3 +68,26 @@ def test_utf8_and_repeated_output_are_deterministic() -> None:
     first = canonicalize(payload)
     assert first.decode("utf-8") == '{"emoji":"🙂","word":"café"}'
     assert all(canonicalize(payload) == first for _ in range(10))
+
+
+def test_envelope_digest_remains_bound_to_an_immutable_payload() -> None:
+    source = {"items": [1]}
+    envelope = envelope_payload(source)
+    expected_bytes = b'{"items":[1]}'
+    expected_digest = hashlib.sha256(expected_bytes).hexdigest()
+
+    source["items"].append(2)
+    assert isinstance(envelope.payload, Mapping)
+    with pytest.raises(TypeError):
+        operator.setitem(
+            cast(MutableMapping[str, object], envelope.payload),
+            "items",
+            (),
+        )
+    items = envelope.payload["items"]
+    assert isinstance(items, tuple)
+    with pytest.raises(AttributeError):
+        operator.methodcaller("append", 2)(items)
+
+    assert canonicalize(envelope.payload) == expected_bytes
+    assert envelope.digest.value == expected_digest

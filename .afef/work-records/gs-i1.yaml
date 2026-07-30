@@ -10,11 +10,12 @@ scope:
     - "Resolve only the exact authorized Python dependencies from unauthenticated public PyPI with CPython 3.12 and uv."
     - "Create and remove uniquely named local PostgreSQL 16 disposable databases for deterministic migration, transaction, concurrency, trigger, and catalog validation."
     - "Create one local candidate commit and external candidate/evidence packages for the Implementation Supervisor."
+    - "Apply the Product Owner-authorized GS-I1-CR1 correction as exactly one direct-descendant commit: deeply freeze canonical and immutable-record payloads, add adversarial mutation and deterministic guarded lease evidence, and produce corrected external evidence."
   out_of_scope:
     - "GitHub credentials, APIs, SDKs, real reads, writes, webhooks, comments, OAuth, public endpoints, or remote Git operations."
     - "Application use cases, concrete production repositories, process entry points, runtime composition, workers, queues, Redis, LLMs, containers, deployment, CI, or monitoring."
     - "Production database roles, grants, connection pooling, backup, secrets systems, or complete persistence-model and readiness claims."
-    - "Self-review, candidate disposition, acceptance, correction pass, independent-review conclusion, publication, deployment, or GS-I2."
+    - "Self-review, candidate disposition, acceptance, any correction beyond GS-I1-CR1, independent-review conclusion, publication, deployment, or GS-I2."
 authorization_envelope:
   operations:
     - operation_id: "OP-GS-I1-LOCAL-READS"
@@ -84,6 +85,16 @@ authorization_envelope:
         - "OP-GS-I1-ALLOWLIST-WRITES"
         - "OP-GS-I1-DISPOSABLE-DATABASES"
         - "OP-GS-I1-CANDIDATE-COMMIT"
+    - authorization_id: "AUTH-GS-I1-CR1-PRODUCT-OWNER"
+      reference: >-
+        Product Owner authorization for exactly the Implementation
+        Supervisor-proposed GS-I1-CR1 correction envelope, one direct-
+        descendant correction commit, local PostgreSQL validation, corrected
+        external incident evidence, and a self-contained bundle.
+      operation_ids:
+        - "OP-GS-I1-ALLOWLIST-WRITES"
+        - "OP-GS-I1-DISPOSABLE-DATABASES"
+        - "OP-GS-I1-CANDIDATE-COMMIT"
   affected_paths:
     - ".afef/project-manifest.yaml"
     - ".afef/specifications/gs-i1-local-foundation.md"
@@ -125,6 +136,8 @@ authorization_envelope:
   constraints:
     - "Begin from root commit 4f8ee323e88bcbdfd7717e87508b7c9147685117 and preserve main unchanged."
     - "Use branch gs-i1-local-foundation and create exactly one commit with subject feat: establish GS-I1 local foundation."
+    - "Preserve that candidate without amend, rebase, squash, reset, replacement, or discard; create exactly one direct-descendant GS-I1-CR1 commit with subject fix: harden GS-I1 immutable contracts and lease evidence."
+    - "During GS-I1-CR1 modify only its exact 13-path correction allowlist; preserve pyproject.toml, uv.lock, PostgreSQL metadata, the migration, SPEC-0001, and the GS-A0 work record byte-identically."
     - "Preserve SPEC-0001 and the GS-A0 work record byte-identically."
     - "Use only CPython 3.12, the exact dependency ranges, public PyPI endpoints, synchronous SQLAlchemy Core, Psycopg 3, and one Alembic revision."
     - "Preserve every stop condition, final-freeze rule, evidence classification, prohibited operation, and explicit deferred claim from the GS-I1 authorization."
@@ -132,11 +145,13 @@ authorization_envelope:
     - "Stop if repository identity, accepted ancestry, clean state, branch availability, tools, registry isolation, PostgreSQL prerequisites, role capabilities, or disposable database isolation differs."
     - "Stop if any path outside the allowlist, unauthorized dependency/source, prerelease, second migration, ninth table, concrete repository, remote technology, credential, or prohibited effect becomes necessary."
     - "Stop without repair if any required validation fails after final mutation freeze or project files change during locked validation."
+    - "For GS-I1-CR1 also stop if a schema, migration, dependency, new foundational decision, path outside the correction allowlist, or second correction commit becomes necessary."
 deliverables:
   - "SPEC-0002 and this separate-authority High Assurance work record."
   - "The bounded runtime package, exact dependency lock, one migration, and required local tests."
   - "One candidate commit and verified bundle on the authorized local branch."
   - "One external evidence directory and candidate-and-evidence archive with SHA-256."
+  - "One direct-descendant correction commit, a self-contained corrected bundle, and a credential-free mutable-phase database incident record."
 implementation_state: implemented
 implementer:
   actor_id: "local-ide-agent-gs-i1"
@@ -144,22 +159,33 @@ implementer:
 validation_summaries:
   - check: "Ruff format and lint, strict mypy, and Import Linter"
     result: passed
-    summary: "Mutable-phase locked validation passed without diagnostics; the unchanged frozen candidate must receive the required final sequence."
+    summary: "Original GS-I1 validation and the complete mutable-phase GS-I1-CR1 locked Ruff, strict mypy, and Import Linter sequence passed without diagnostics."
   - check: "Unit, contract, architecture, Hypothesis, and PostgreSQL integration tests"
     result: passed
-    summary: "All 76 tests passed, including deterministic create/drop cleanup, transaction, CAS, lease, immutable-reference, trigger, migration, and catalog cases."
+    summary: "All 87 corrected tests passed: 70 unit, contract, and architecture tests plus 17 PostgreSQL tests. They prove copied deep immutability, detached exports, guarded lease release, and explicit deterministic expiry CAS without sleeps."
   - check: "Global branch coverage"
     result: passed
-    summary: "Pre-freeze locked coverage was 98.90%, above the required 90% threshold."
+    summary: "Corrected pre-freeze locked branch coverage was 99.02%, above the required 90% threshold."
   - check: "Alembic and direct PostgreSQL schema evidence"
     result: passed
-    summary: "One root/head, fresh upgrade, bounded metadata check, offline SQL, downgrade, re-upgrade, and direct catalog assertions passed."
+    summary: "One unchanged root/head, fresh upgrade, bounded metadata check, byte-identical offline SQL, downgrade, re-upgrade, and direct catalog assertions passed."
   - check: "Pinned AFEF v0.2.0 validator"
     result: passed
     summary: "The cleared-environment offline validator exited 0 with empty stdout and stderr."
 evidence_references: []
 reviews:
   - review_id: "GS-I1-IMPLEMENTATION-SUPERVISOR"
+    status: completed
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+    recommendation: changes_required
+    evidence_reference: "GS-I1 Implementation Supervisor Review supplied by the Product Owner for candidate 5ff1ffb481e118d8295b99b2255ee57bbfc3a6e2."
+    conditions:
+      - "Correct GS-I1-IMM-001 deeply mutable envelope and immutable-record payloads."
+      - "Correct GS-I1-LEASE-001 guarded release and deterministic expiry evidence."
+      - "Correct GS-I1-EVID-001 bundle self-containment and incident evidence."
+  - review_id: "GS-I1-CR1-IMPLEMENTATION-SUPERVISOR"
     status: pending
     reviewer:
       actor_id: "github-steward-implementation-supervisor"
@@ -179,9 +205,9 @@ human_checkpoint:
   owner:
     actor_id: "github-steward-implementation-supervisor"
     role: implementation_supervisor
-  next_required_action: "Review the exact commit-bound GS-I1 candidate and external evidence; the IDE Agent may not review or accept it."
+  next_required_action: "Rereview the exact direct-descendant GS-I1-CR1 candidate and corrected external evidence; the IDE Agent may not review or accept it."
 known_limitations:
   - "Append-only repository interfaces and PostgreSQL triggers are established; production role-grant enforcement is deferred and not claimed."
   - "Alembic metadata drift checks are bounded and do not prove complete PostgreSQL schema equivalence."
   - "Raw-JSON duplicate-key ingress detection and every GitHub, write, operational, and production-readiness capability remain deferred and not claimed."
-next_action: "Provide the exact commit-bound candidate and external evidence to the Implementation Supervisor; do not begin self-review, correction, acceptance, publication, or GS-I2."
+next_action: "Provide the exact commit-bound GS-I1-CR1 candidate and corrected external evidence to the Implementation Supervisor; do not begin self-review, another correction, independent review, acceptance, publication, or GS-I2."

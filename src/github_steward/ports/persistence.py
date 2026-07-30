@@ -9,7 +9,11 @@ from enum import StrEnum
 from types import TracebackType
 from typing import NewType, Protocol, Self
 
-from github_steward.domain.canonical import CanonicalValue, Digest
+from github_steward.domain.canonical import (
+    CanonicalValue,
+    Digest,
+    freeze_canonical_value,
+)
 
 DeliveryId = NewType("DeliveryId", str)
 WorkRecordId = NewType("WorkRecordId", str)
@@ -40,7 +44,7 @@ class WorkRecord:
     available_at: datetime
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class CanonicalObservationRecord:
     """An immutable canonical observation."""
 
@@ -52,6 +56,26 @@ class CanonicalObservationRecord:
     observed_at: datetime
     payload: CanonicalValue
     digest: Digest
+
+    def __init__(
+        self,
+        version_id: ObservationVersionId,
+        entity_kind: str,
+        entity_id: str,
+        schema_id: str,
+        schema_version: int,
+        observed_at: datetime,
+        payload: object,
+        digest: Digest,
+    ) -> None:
+        object.__setattr__(self, "version_id", version_id)
+        object.__setattr__(self, "entity_kind", entity_kind)
+        object.__setattr__(self, "entity_id", entity_id)
+        object.__setattr__(self, "schema_id", schema_id)
+        object.__setattr__(self, "schema_version", schema_version)
+        object.__setattr__(self, "observed_at", observed_at)
+        object.__setattr__(self, "payload", freeze_canonical_value(payload))
+        object.__setattr__(self, "digest", digest)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +101,7 @@ class WorkLease:
     version: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class AnalysisViewRecord:
     """An immutable analysis view and its observation-version references."""
 
@@ -88,8 +112,24 @@ class AnalysisViewRecord:
     digest: Digest
     observation_versions: tuple[tuple[str, ObservationVersionId], ...]
 
+    def __init__(
+        self,
+        view_id: AnalysisViewId,
+        schema_id: str,
+        schema_version: int,
+        payload: object,
+        digest: Digest,
+        observation_versions: tuple[tuple[str, ObservationVersionId], ...],
+    ) -> None:
+        object.__setattr__(self, "view_id", view_id)
+        object.__setattr__(self, "schema_id", schema_id)
+        object.__setattr__(self, "schema_version", schema_version)
+        object.__setattr__(self, "payload", freeze_canonical_value(payload))
+        object.__setattr__(self, "digest", digest)
+        object.__setattr__(self, "observation_versions", observation_versions)
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(frozen=True, slots=True, init=False)
 class AuditEventRecord:
     """An append-only audit event without a cryptographic-chain claim."""
 
@@ -101,6 +141,30 @@ class AuditEventRecord:
     schema_version: int
     payload: CanonicalValue
     digest: Digest
+
+    def __init__(
+        self,
+        event_id: AuditEventId,
+        event_kind: str,
+        actor_or_authority_id: str,
+        occurred_at: datetime,
+        schema_id: str,
+        schema_version: int,
+        payload: object,
+        digest: Digest,
+    ) -> None:
+        object.__setattr__(self, "event_id", event_id)
+        object.__setattr__(self, "event_kind", event_kind)
+        object.__setattr__(
+            self,
+            "actor_or_authority_id",
+            actor_or_authority_id,
+        )
+        object.__setattr__(self, "occurred_at", occurred_at)
+        object.__setattr__(self, "schema_id", schema_id)
+        object.__setattr__(self, "schema_version", schema_version)
+        object.__setattr__(self, "payload", freeze_canonical_value(payload))
+        object.__setattr__(self, "digest", digest)
 
 
 class DeliveryIngressResult(StrEnum):

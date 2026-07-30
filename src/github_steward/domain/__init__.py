@@ -3,7 +3,11 @@
 from github_steward.domain.canonical import (
     DIGEST_FORMAT,
     CanonicalEnvelope,
+    CanonicalValue,
     Digest,
+    JsonCanonicalValue,
+    freeze_canonical_value,
+    to_json_compatible,
     validate_digest_timestamp,
 )
 from github_steward.domain.errors import (
@@ -31,6 +35,7 @@ __all__ = [
     "ApprovalState",
     "BlockReason",
     "CanonicalEnvelope",
+    "CanonicalValue",
     "CanonicalizationError",
     "Digest",
     "DomainValidationError",
@@ -39,5 +44,8 @@ __all__ = [
     "ExecutionAttempt",
     "ExecutionAttemptState",
     "InvalidTransitionError",
+    "JsonCanonicalValue",
+    "freeze_canonical_value",
+    "to_json_compatible",
     "validate_digest_timestamp",
 ]

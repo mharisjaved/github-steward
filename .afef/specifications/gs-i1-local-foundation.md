@@ -50,13 +50,13 @@ acceptance_criteria:
   - id: "AC-0001"
     description: "Exactly four immutable fail-closed lifecycle families implement every authorized transition, reject every other transition without mutation, and preserve BlockReason as a separate reason inventory."
   - id: "AC-0002"
-    description: "A strict project-owned adapter accepts only constructed supported Python values, enforces the exact safe integer and timestamp policies, emits RFC 8785 UTF-8 bytes, and computes lowercase payload-only jcs-sha256/v1 digests."
+    description: "A strict project-owned boundary copies and deeply freezes constructed supported Python values, exports detached JSON-shaped copies, enforces the exact safe integer and timestamp policies, emits RFC 8785 UTF-8 bytes, and computes lowercase payload-only jcs-sha256/v1 digests."
   - id: "AC-0003"
     description: "Domain-oriented protocols expose append-only observation, view, and audit storage plus explicit pointer CAS, transactional inbox/work, lease, and unit-of-work boundaries without concrete production repositories."
   - id: "AC-0004"
     description: "Synchronous SQLAlchemy Core metadata and one transactional Alembic root revision define exactly the eight authorized PostgreSQL tables with deterministic names and append-only UPDATE/DELETE rejection triggers."
   - id: "AC-0005"
-    description: "Local PostgreSQL 16 integration evidence proves transaction rollback, delivery conflict classification, pointer CAS, lease contention, immutable references, triggers, catalog invariants, and upgrade-downgrade-reupgrade behavior."
+    description: "Local PostgreSQL 16 integration evidence proves transaction rollback, delivery conflict classification, pointer CAS, lease contention, guarded release, deterministic expiry and reacquisition, immutable references, triggers, catalog invariants, and upgrade-downgrade-reupgrade behavior."
   - id: "AC-0006"
     description: "Locked Ruff, mypy, Import Linter, pytest, branch coverage, Alembic, catalog, and AFEF validation pass without changing the frozen project files."
   - id: "AC-0007"
@@ -109,6 +109,15 @@ The API does not parse raw JSON. Duplicate member names are unobservable after
 ordinary parsing into a Python mapping; duplicate-key ingress detection is
 deferred and not claimed.
 
+Canonical values stored by the domain are deeply immutable. Mappings are
+copied into read-only mappings and sequences are copied into tuples at the
+domain boundary. The caller's original nested objects therefore share no
+mutable state with an envelope or immutable persistence record. Serialization
+and `CanonicalEnvelope.as_mapping()` create detached JSON-compatible mappings
+and lists; callers may mutate those exports without changing the stored value.
+The same validated frozen representation is canonicalized, so accepted RFC
+8785 bytes and payload-only digests are unchanged.
+
 ## Persistence contract
 
 Repository protocols expose append/insert but no update or delete operation for
@@ -116,6 +125,18 @@ canonical observations, analysis views, and audit events. Current observation
 pointers use versioned compare-and-swap. Delivery inbox and work creation share
 one transaction boundary. Work leases use opaque tokens and guarded versions;
 lease expiry does not authorize an external retry.
+
+The local lease contract is represented by explicit guarded SQL:
+
+* release updates one row only for the matching token and version, increments
+  the version, and clears owner, token, and expiry;
+* the wrong token, a stale version, or an operation after ownership changes
+  updates zero rows;
+* reacquisition before the explicit expiry instant updates zero rows;
+* reacquisition at or after that instant still requires a matching expected
+  version and increments it;
+* tests provide explicit timestamps and never infer external retry authority
+  or rely on sleeps.
 
 The PostgreSQL foundation contains exactly:
 
@@ -144,6 +165,21 @@ append_only_enforcement:
 
 No cryptographic immutability, cryptographic audit chain, or complete
 persistence-model claim is made.
+
+## GS-I1-CR1 correction boundary
+
+The Product Owner authorized one direct-descendant correction after the
+Implementation Supervisor returned AMBER findings `GS-I1-IMM-001`,
+`GS-I1-LEASE-001`, and `GS-I1-EVID-001`. The correction is limited to deeply
+immutable canonical and persistence-record payloads, adversarial
+mutation-resistance tests, deterministic guarded lease tests, this
+specification and its work record, and external corrected evidence.
+
+No metadata, migration, dependency, accepted GS-A0 record, or foundational
+design decision changes. External evidence must include a credential-free
+record of the original mutable-phase disposable-database teardown incident and
+a self-contained Git bundle containing the accepted root, original GS-I1
+candidate, and direct-descendant correction.
 
 ## Migration and evidence boundary
 
