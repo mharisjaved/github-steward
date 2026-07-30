@@ -1,0 +1,140 @@
+# AFEF v0.2.0 minimum-adoption work record.
+# Contract: agent-factory-engineering-framework/schemas/v0.2/work-record.schema.json
+schema_version: "0.2.0"
+work_id: "GS-A0"
+related_specifications:
+  - "SPEC-0001"
+risk_profile: standard
+scope:
+  in_scope:
+    - "Inspect the local adopter and pinned AFEF repositories without network access."
+    - "Create exactly the three AFEF v0.2.0 record instances and README navigation authorized for GS-A0."
+    - "Consolidate the accepted R0 architecture into SPEC-0001 without selecting implementation dependencies."
+    - "Run offline conformance and deterministic documentation checks and package evidence outside the adopter repository."
+  out_of_scope:
+    - "GS-I1 and local Sprint 1 implementation."
+    - "Source scaffolding, package layout, dependency selection or installation, database schema, migrations, application code, tests, CI, or deployment files."
+    - "GitHub App registration, credentials, OAuth implementation, public webhooks, GitHub APIs, real reads, writes, or any remote operation."
+    - "Supervisor review, independent review, final-gate issuance, every commit except one initial local root commit containing exactly the four authorized paths, push, pull request, merge, tag, publication, release, or deployment."
+authorization_envelope:
+  operations:
+    - operation_id: "OP-BOUNDED-LOCAL-READS"
+      effect_class: local-read
+      decision: permitted
+      authorization_requirement: bounded_work_envelope
+      description: "Bounded reads of the two local repositories, the supplied GS-R0 report, and local validation evidence."
+    - operation_id: "OP-FOUR-CANDIDATE-FILES"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create only the three AFEF records and README navigation listed in affected_paths."
+    - operation_id: "OP-TEMP-EVIDENCE"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create the GS-A0 and GS-A0-CR1 evidence directories and archives outside github-steward."
+    - operation_id: "OP-LOCAL-DESTRUCTIVE"
+      effect_class: local-destructive
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No local destructive operation is authorized."
+    - operation_id: "OP-EXTERNAL-READS"
+      effect_class: external-read
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No external read, GitHub credential use, GitHub API call, fetch, or pull is authorized."
+    - operation_id: "OP-EXTERNAL-WRITES"
+      effect_class: external-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No external write, push, pull request, merge, or remote mutation is authorized."
+    - operation_id: "OP-EXTERNAL-DESTRUCTIVE"
+      effect_class: external-destructive
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No external destructive action is authorized."
+    - operation_id: "OP-IDENTITY-PERMISSION"
+      effect_class: identity-permission-change
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No identity, credential, repository permission, or GitHub App configuration change is authorized."
+    - operation_id: "OP-PUBLICATION-RELEASE"
+      effect_class: publication-release
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No publication, release, tag, or deployment is authorized."
+    - operation_id: "OP-GIT-COMMIT"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Stage exactly the four affected paths and create exactly one initial local root commit with no parent."
+  authorization_references:
+    - authorization_id: "AUTH-GS-A0-PRODUCT-OWNER"
+      reference: |-
+        Authorized: GS-A0 — AFEF Adoption and Repository-Owned Architecture Baseline.
+
+        Create only the exact AFEF v0.2.0 adoption records and canonical architecture
+        documentation in the local github-steward repository; run offline validation
+        and prepare evidence.
+
+        Do not begin local Sprint 1, select implementation dependencies, use GitHub
+        credentials or APIs, or perform any remote mutation.
+
+        Apply the stop conditions defined by the GS-R0 Recovery Report.
+      operation_ids:
+        - "OP-FOUR-CANDIDATE-FILES"
+        - "OP-TEMP-EVIDENCE"
+    - authorization_id: "AUTH-GS-A0-CR1-COMMIT"
+      reference: "I authorize commits as well."
+      operation_ids:
+        - "OP-GIT-COMMIT"
+  affected_paths:
+    - ".afef/project-manifest.yaml"
+    - ".afef/specifications/gs-architecture-baseline.md"
+    - ".afef/work-records/gs-a0-adoption.yaml"
+    - "README.md"
+  constraints:
+    - "Use AFEF version 0.2.0 at commit e9ff76f4ca789247f76187cbbdc2fde9eaa11f25 and tree ab9daf558bebd6e997da68f77db8a9060f5fc393."
+    - "Preserve exactly three AFEF record instances and use SPEC-0001 as the sole canonical repository-owned architecture document."
+    - "Do not install packages or change a Python environment."
+    - "Stage only the exact four affected paths and create exactly one initial root commit with no parent and subject docs: adopt AFEF v0.2.0 architecture baseline."
+    - "The statement I authorize commits as well. is bounded by GS-A0-CR1 to that one root commit only; no additional commit authority is inferred."
+    - "Do not fetch, pull, push, invoke gh or a GitHub API, create an additional commit, amend, rebase, tag, open or merge a pull request, publish, release, deploy, or perform any remote mutation."
+    - "Do not choose the package layout, ORM, database access style, migration tool, web framework, RFC 8785 dependency, testing libraries, deployment products, or integration bounds."
+    - "Do not modify adopter records after the final successful pre-commit validator run; afterward only exact-path staging, the one authorized root commit, read-only verification, and evidence creation outside both repositories are permitted."
+  stop_conditions:
+    - "Stop AMBER if either local repository identity is ambiguous."
+    - "Stop AMBER if github-steward is no longer an empty unborn main branch before candidate creation or contains unexpected or conflicting content."
+    - "Stop AMBER if the pinned AFEF commit or tree differs, the AFEF worktree is dirty, or a required contract digest differs."
+    - "Stop AMBER if the exact GS-R0 GREEN recovery report is absent or differs from the Product Owner-provided artifact."
+    - "Stop AMBER if exact AFEF v0.2.0 templates, schemas, validator metadata, or a suitable existing validation interpreter cannot be resolved."
+    - "Stop AMBER if completing GS-A0 requires selecting any implementation dependency or cannot remain documentation/adoption-only."
+    - "Stop AMBER if AFEF validation fails."
+deliverables:
+  - "One exact AFEF v0.2.0 project manifest."
+  - "One canonical repository-owned architecture specification, SPEC-0001."
+  - "One bounded GS-A0 adoption work record."
+  - "One minimal README navigation document."
+  - "One verified evidence archive outside github-steward."
+implementation_state: in_progress
+implementer:
+  actor_id: "local-ide-agent-gs-a0"
+  role: ide_agent
+validation_summaries:
+  - check: "Pinned AFEF offline validator"
+    result: passed
+    summary: "A clean-room preliminary run exited 0 with empty stdout and stderr; the unchanged final record set must receive the reported final run."
+  - check: "Documentation and bounded-scope deterministic checks"
+    result: passed
+    summary: "The candidate has exactly three AFEF records and four files; local links resolve, whitespace checks pass, and no secret signature or prohibited production path is present."
+evidence_references: []
+reviews: []
+final_gate:
+  status: not_issued
+human_checkpoint:
+  status: awaiting
+  next_required_action: "Independent Implementation Supervisor review of the exact commit-bound GS-A0 candidate and its external GS-A0-CR1 evidence archive."
+known_limitations:
+  - "GS-A0 records architecture intent and offline AFEF conformance only; it provides no implementation, integration, operational, release, or production-readiness evidence."
+  - "Real GitHub endpoint, permission, freshness, pagination, OAuth, webhook, and write behavior remain unverified behind later gates."
+next_action: "Provide the commit-bound candidate and GS-A0-CR1 evidence archive to an independent Implementation Supervisor; do not begin supervisor review, independent review, another commit, or GS-I1."

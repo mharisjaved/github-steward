@@ -1,0 +1,33 @@
+# AFEF v0.2.0 minimum-adoption instance.
+# Contract: agent-factory-engineering-framework/schemas/v0.2/project-manifest.schema.json
+# Normative location: <project-root>/.afef/project-manifest.yaml
+schema_version: "0.2.0"
+project:
+  id: "github-steward"
+  name: "GitHub Steward"
+repository:
+  identity: "github.com/Harry5174/github-steward"
+  default_branch: "main"
+afef:
+  version: "0.2.0"
+  commit: "e9ff76f4ca789247f76187cbbdc2fde9eaa11f25"
+constitution:
+  inline:
+    - "Establish deterministic evidence before drawing conclusions."
+    - "Treat GitHub as remote truth and PostgreSQL as local-workflow truth; neither silently replaces the other."
+    - "Deliver read-only operation before enabling any write capability."
+    - "Require explicit human authorization for every externally effectful operation."
+    - "Keep proposal, approval, execution, and reconciliation as separate authorities and lifecycle steps."
+    - "Never make credentials available to an LLM or analysis component."
+    - "After any possible external send, reconcile before considering a retry."
+    - "Report exact evidence and never overclaim production readiness."
+    - "Keep GS-I1 and all GitHub integration subject to separate Product Owner authorization."
+paths:
+  specifications: ".afef/specifications"
+  work_records: ".afef/work-records"
+default_risk_profile: standard
+safety_boundaries:
+  - "GitHub credentials, APIs, real reads, and writes remain disabled during GS-A0."
+  - "No local Sprint 1 implementation, dependency selection, application code, test, CI, deployment, or environment setup is authorized by GS-A0."
+  - "Exactly one local initial root commit containing only the four authorized GS-A0 files is authorized; push, pull request, merge, tag, publication, deployment, and every other remote mutation remain prohibited."
+  - "The architecture readiness disposition permits a separately authorized local Sprint 1; it does not authorize GS-I1."
