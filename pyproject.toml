@@ -1,0 +1,141 @@
+[project]
+name = "github-steward"
+version = "0.1.0"
+description = "Local domain and persistence foundation for GitHub Steward"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "SQLAlchemy>=2.0,<2.1",
+  "alembic>=1.18,<1.19",
+  "psycopg[binary]>=3.3,<3.4",
+  "rfc8785>=0.1.4,<0.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+  "pytest>=9,<10",
+  "hypothesis>=6.100,<7",
+  "pytest-cov>=7,<8",
+  "ruff>=0.15,<0.17",
+  "mypy>=2,<3",
+  "import-linter>=2.10,<3",
+]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E4",
+  "E7",
+  "E9",
+  "F",
+  "I",
+  "UP",
+  "B",
+  "SIM",
+  "RUF",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+files = ["src", "tests"]
+explicit_package_bases = true
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["github_steward"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.importlinter]
+root_package = "github_steward"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is independent"
+type = "forbidden"
+source_modules = ["github_steward.domain"]
+forbidden_modules = [
+  "github_steward.application",
+  "github_steward.ports",
+  "github_steward.adapters",
+  "github_steward.infrastructure",
+  "sqlalchemy",
+  "psycopg",
+  "alembic",
+  "rfc8785",
+]
+
+[[tool.importlinter.contracts]]
+name = "Ports depend only inward"
+type = "forbidden"
+source_modules = ["github_steward.ports"]
+forbidden_modules = [
+  "github_steward.application",
+  "github_steward.adapters",
+  "github_steward.infrastructure",
+  "sqlalchemy",
+  "psycopg",
+  "alembic",
+  "rfc8785",
+]
+
+[[tool.importlinter.contracts]]
+name = "Application depends only inward"
+type = "forbidden"
+source_modules = ["github_steward.application"]
+forbidden_modules = [
+  "github_steward.adapters",
+  "github_steward.infrastructure",
+  "sqlalchemy",
+  "psycopg",
+  "alembic",
+  "rfc8785",
+]
+
+[[tool.importlinter.contracts]]
+name = "Canonicalization and PostgreSQL adapters are independent"
+type = "independence"
+modules = [
+  "github_steward.adapters.canonicalization",
+  "github_steward.adapters.postgres",
+]
+
+[[tool.importlinter.contracts]]
+name = "No inward package imports infrastructure"
+type = "forbidden"
+source_modules = [
+  "github_steward.domain",
+  "github_steward.ports",
+  "github_steward.application",
+  "github_steward.adapters",
+]
+forbidden_modules = ["github_steward.infrastructure"]

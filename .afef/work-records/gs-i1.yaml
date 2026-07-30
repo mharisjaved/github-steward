@@ -1,0 +1,187 @@
+# AFEF v0.2.0 High Assurance work record.
+schema_version: "0.2.0"
+work_id: "GS-I1"
+related_specifications:
+  - "SPEC-0002"
+risk_profile: high_assurance
+scope:
+  in_scope:
+    - "Implement the authorized local domain lifecycle, canonicalization, digest, persistence-port, eight-table PostgreSQL metadata, and single-revision migration foundation."
+    - "Resolve only the exact authorized Python dependencies from unauthenticated public PyPI with CPython 3.12 and uv."
+    - "Create and remove uniquely named local PostgreSQL 16 disposable databases for deterministic migration, transaction, concurrency, trigger, and catalog validation."
+    - "Create one local candidate commit and external candidate/evidence packages for the Implementation Supervisor."
+  out_of_scope:
+    - "GitHub credentials, APIs, SDKs, real reads, writes, webhooks, comments, OAuth, public endpoints, or remote Git operations."
+    - "Application use cases, concrete production repositories, process entry points, runtime composition, workers, queues, Redis, LLMs, containers, deployment, CI, or monitoring."
+    - "Production database roles, grants, connection pooling, backup, secrets systems, or complete persistence-model and readiness claims."
+    - "Self-review, candidate disposition, acceptance, correction pass, independent-review conclusion, publication, deployment, or GS-I2."
+authorization_envelope:
+  operations:
+    - operation_id: "OP-GS-I1-LOCAL-READS"
+      effect_class: local-read
+      decision: permitted
+      authorization_requirement: bounded_work_envelope
+      description: "Read the accepted repository, local tools, registry configuration names, local PostgreSQL facts, and validation evidence."
+    - operation_id: "OP-GS-I1-ALLOWLIST-WRITES"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create or modify only the exact GS-I1 affected-path allowlist on the authorized local branch."
+    - operation_id: "OP-GS-I1-DISPOSABLE-DATABASES"
+      effect_class: local-destructive
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create and delete only uniquely named local github_steward_gs_i1_* disposable databases."
+    - operation_id: "OP-GS-I1-CANDIDATE-COMMIT"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create exactly one local candidate commit with the authorized subject."
+    - operation_id: "OP-GS-I1-PYPI-READS"
+      effect_class: external-read
+      decision: permitted
+      authorization_requirement: bounded_work_envelope
+      description: "Read unauthenticated package metadata and artifacts only from pypi.org and files.pythonhosted.org."
+    - operation_id: "OP-GS-I1-EXTERNAL-WRITES"
+      effect_class: external-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No external write or remote Git mutation is authorized."
+    - operation_id: "OP-GS-I1-EXTERNAL-DESTRUCTIVE"
+      effect_class: external-destructive
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No external destructive action is authorized."
+    - operation_id: "OP-GS-I1-IDENTITY-PERMISSION"
+      effect_class: identity-permission-change
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No role, password, grant, credential, or remote permission change is authorized."
+    - operation_id: "OP-GS-I1-PUBLICATION"
+      effect_class: publication-release
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "No publication, release, tag, deployment, or acceptance is authorized."
+  authorization_references:
+    - authorization_id: "AUTH-GS-I1-PRODUCT-OWNER"
+      reference: >-
+        Product Owner authorization for GS-I1 — Local Domain,
+        Canonicalization, and Persistence Foundation, including the exact
+        corrected preimplementation package, High Assurance profile,
+        affected-path allowlist, local PostgreSQL create/drop authority,
+        public-PyPI reads, authorized branch, one commit, and exact commit
+        subject.
+      operation_ids:
+        - "OP-GS-I1-ALLOWLIST-WRITES"
+        - "OP-GS-I1-DISPOSABLE-DATABASES"
+        - "OP-GS-I1-CANDIDATE-COMMIT"
+    - authorization_id: "AUTH-GS-I1-SECOND-REPLACEMENT"
+      reference: >-
+        Product Owner authorization for one GS-I1 second replacement local IDE
+        Agent implementation pass after the preceding replacement pass stopped
+        without mutation because the database URL was not inherited.
+      operation_ids:
+        - "OP-GS-I1-ALLOWLIST-WRITES"
+        - "OP-GS-I1-DISPOSABLE-DATABASES"
+        - "OP-GS-I1-CANDIDATE-COMMIT"
+  affected_paths:
+    - ".afef/project-manifest.yaml"
+    - ".afef/specifications/gs-i1-local-foundation.md"
+    - ".afef/work-records/gs-i1.yaml"
+    - ".python-version"
+    - ".gitignore"
+    - "README.md"
+    - "alembic.ini"
+    - "pyproject.toml"
+    - "uv.lock"
+    - "src/github_steward/__init__.py"
+    - "src/github_steward/domain/__init__.py"
+    - "src/github_steward/domain/canonical.py"
+    - "src/github_steward/domain/errors.py"
+    - "src/github_steward/domain/lifecycles.py"
+    - "src/github_steward/application/__init__.py"
+    - "src/github_steward/ports/__init__.py"
+    - "src/github_steward/ports/persistence.py"
+    - "src/github_steward/adapters/__init__.py"
+    - "src/github_steward/adapters/canonicalization/__init__.py"
+    - "src/github_steward/adapters/canonicalization/rfc8785.py"
+    - "src/github_steward/adapters/postgres/__init__.py"
+    - "src/github_steward/adapters/postgres/metadata.py"
+    - "src/github_steward/infrastructure/__init__.py"
+    - "migrations/env.py"
+    - "migrations/script.py.mako"
+    - "migrations/versions/0001_gs_i1_foundation.py"
+    - "tests/conftest.py"
+    - "tests/unit/domain/test_canonical_contracts.py"
+    - "tests/unit/domain/test_lifecycles.py"
+    - "tests/contract/test_jcs_adversarial.py"
+    - "tests/contract/test_jcs_vectors.py"
+    - "tests/contract/test_repository_ports.py"
+    - "tests/integration/postgres/conftest.py"
+    - "tests/integration/postgres/test_concurrency.py"
+    - "tests/integration/postgres/test_migrations.py"
+    - "tests/integration/postgres/test_schema_invariants.py"
+    - "tests/architecture/test_boundaries.py"
+  constraints:
+    - "Begin from root commit 4f8ee323e88bcbdfd7717e87508b7c9147685117 and preserve main unchanged."
+    - "Use branch gs-i1-local-foundation and create exactly one commit with subject feat: establish GS-I1 local foundation."
+    - "Preserve SPEC-0001 and the GS-A0 work record byte-identically."
+    - "Use only CPython 3.12, the exact dependency ranges, public PyPI endpoints, synchronous SQLAlchemy Core, Psycopg 3, and one Alembic revision."
+    - "Preserve every stop condition, final-freeze rule, evidence classification, prohibited operation, and explicit deferred claim from the GS-I1 authorization."
+  stop_conditions:
+    - "Stop if repository identity, accepted ancestry, clean state, branch availability, tools, registry isolation, PostgreSQL prerequisites, role capabilities, or disposable database isolation differs."
+    - "Stop if any path outside the allowlist, unauthorized dependency/source, prerelease, second migration, ninth table, concrete repository, remote technology, credential, or prohibited effect becomes necessary."
+    - "Stop without repair if any required validation fails after final mutation freeze or project files change during locked validation."
+deliverables:
+  - "SPEC-0002 and this separate-authority High Assurance work record."
+  - "The bounded runtime package, exact dependency lock, one migration, and required local tests."
+  - "One candidate commit and verified bundle on the authorized local branch."
+  - "One external evidence directory and candidate-and-evidence archive with SHA-256."
+implementation_state: implemented
+implementer:
+  actor_id: "local-ide-agent-gs-i1"
+  role: ide_agent
+validation_summaries:
+  - check: "Ruff format and lint, strict mypy, and Import Linter"
+    result: passed
+    summary: "Mutable-phase locked validation passed without diagnostics; the unchanged frozen candidate must receive the required final sequence."
+  - check: "Unit, contract, architecture, Hypothesis, and PostgreSQL integration tests"
+    result: passed
+    summary: "All 76 tests passed, including deterministic create/drop cleanup, transaction, CAS, lease, immutable-reference, trigger, migration, and catalog cases."
+  - check: "Global branch coverage"
+    result: passed
+    summary: "Pre-freeze locked coverage was 98.90%, above the required 90% threshold."
+  - check: "Alembic and direct PostgreSQL schema evidence"
+    result: passed
+    summary: "One root/head, fresh upgrade, bounded metadata check, offline SQL, downgrade, re-upgrade, and direct catalog assertions passed."
+  - check: "Pinned AFEF v0.2.0 validator"
+    result: passed
+    summary: "The cleared-environment offline validator exited 0 with empty stdout and stderr."
+evidence_references: []
+reviews:
+  - review_id: "GS-I1-IMPLEMENTATION-SUPERVISOR"
+    status: pending
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+independent_review:
+  status: pending
+  reviewer:
+    actor_id: "github-steward-independent-reviewer"
+    role: independent_reviewer
+final_gate:
+  status: not_issued
+  owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+human_checkpoint:
+  status: awaiting
+  owner:
+    actor_id: "github-steward-implementation-supervisor"
+    role: implementation_supervisor
+  next_required_action: "Review the exact commit-bound GS-I1 candidate and external evidence; the IDE Agent may not review or accept it."
+known_limitations:
+  - "Append-only repository interfaces and PostgreSQL triggers are established; production role-grant enforcement is deferred and not claimed."
+  - "Alembic metadata drift checks are bounded and do not prove complete PostgreSQL schema equivalence."
+  - "Raw-JSON duplicate-key ingress detection and every GitHub, write, operational, and production-readiness capability remain deferred and not claimed."
+next_action: "Provide the exact commit-bound candidate and external evidence to the Implementation Supervisor; do not begin self-review, correction, acceptance, publication, or GS-I2."

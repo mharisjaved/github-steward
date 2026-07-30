@@ -23,6 +23,10 @@ constitution:
     - "Report exact evidence and never overclaim production readiness."
     - "Keep GS-I1 and all GitHub integration subject to separate Product Owner authorization."
 paths:
+  documentation: "README.md"
+  source: "src"
+  tests: "tests"
+  architecture: ".afef/specifications"
   specifications: ".afef/specifications"
   work_records: ".afef/work-records"
 default_risk_profile: standard
@@ -31,3 +35,15 @@ safety_boundaries:
   - "No local Sprint 1 implementation, dependency selection, application code, test, CI, deployment, or environment setup is authorized by GS-A0."
   - "Exactly one local initial root commit containing only the four authorized GS-A0 files is authorized; push, pull request, merge, tag, publication, deployment, and every other remote mutation remain prohibited."
   - "The architecture readiness disposition permits a separately authorized local Sprint 1; it does not authorize GS-I1."
+  - "GS-I1 is bounded to its separately authorized local branch, one candidate commit, exact affected-path allowlist, disposable local PostgreSQL databases, and authenticated-free PyPI reads."
+  - "GS-I1 does not authorize GitHub access, remote Git operations, production roles, deployment, publication, self-review, acceptance, or GS-I2."
+ownership:
+  project_owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+  specification_approver:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+  final_gate_owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
