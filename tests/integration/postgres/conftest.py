@@ -1,4 +1,4 @@
-"""Disposable PostgreSQL lifecycle for GS-I1 integration validation."""
+"""Strict disposable PostgreSQL lifecycle for GS-I2 integration validation."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine import URL, Engine, make_url
 
-DATABASE_PREFIX = "github_steward_gs_i1_"
-_DATABASE_NAME = re.compile(r"^github_steward_gs_i1_[0-9a-f]{24}$")
+DATABASE_PREFIX = "github_steward_gs_i2_"
+_DATABASE_NAME = re.compile(r"^github_steward_gs_i2_[0-9a-f]{24}$")
 
 
 def _admin_url() -> URL:
@@ -87,6 +87,24 @@ def _create_database() -> tuple[str, str]:
         engine.dispose()
     runtime = _admin_url().set(database=name).render_as_string(hide_password=False)
     return name, runtime
+
+
+def _matching_database_count() -> int:
+    engine = _admin_engine()
+    try:
+        with engine.connect() as connection:
+            return int(
+                connection.scalar(
+                    sa.text(
+                        "SELECT count(*) FROM pg_database "
+                        "WHERE datname ~ "
+                        "'^github_steward_gs_i2_[0-9a-f]{24}$'"
+                    )
+                )
+                or 0
+            )
+    finally:
+        engine.dispose()
 
 
 def _drop_database(name: str) -> None:
@@ -182,7 +200,7 @@ def _assert_admin_capabilities(summary: dict[str, Any]) -> None:
         "bypassrls": False,
     }
     if summary != expected:
-        raise RuntimeError("PostgreSQL server or role does not meet GS-I1 boundaries")
+        raise RuntimeError("PostgreSQL server or role does not meet GS-I2 boundaries")
 
 
 @pytest.fixture(scope="session")
@@ -190,6 +208,8 @@ def postgres_database_url() -> Iterator[str]:
     """Create, migrate, and always remove one isolated integration database."""
 
     _assert_admin_capabilities(_verify_admin())
+    if _matching_database_count() != 0:
+        raise RuntimeError("GS-I2 disposable databases exist before the test phase")
     name, runtime_url = _create_database()
     previous = os.environ.get("GS_TEST_DATABASE_URL")
     os.environ["GS_TEST_DATABASE_URL"] = runtime_url
@@ -202,6 +222,8 @@ def postgres_database_url() -> Iterator[str]:
         else:
             os.environ["GS_TEST_DATABASE_URL"] = previous
         _drop_database(name)
+        if _matching_database_count() != 0:
+            raise RuntimeError("GS-I2 disposable database cleanup is incomplete")
 
 
 @pytest.fixture(scope="session")

@@ -19,3 +19,11 @@ class InvalidTransitionError(DomainValidationError):
         self.source = source
         self.target = target
         super().__init__(f"{lifecycle} cannot transition from {source} to {target}")
+
+
+class RetryableLocalProcessingError(Exception):
+    """A deterministic local-processing failure that may be retried."""
+
+
+class PermanentLocalProcessingError(Exception):
+    """A deterministic local-processing failure that must not be retried."""

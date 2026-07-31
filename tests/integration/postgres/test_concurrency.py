@@ -1,438 +1,199 @@
-"""Transactional inbox, pointer CAS, and deterministic lease contention."""
+"""PostgreSQL uniqueness and SKIP LOCKED concurrency authority."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from threading import Barrier, Thread
-from uuid import uuid4
 
-import pytest
 import sqlalchemy as sa
-from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.engine import Engine
 
+from github_steward.adapters.canonicalization.rfc8785 import envelope_payload
 from github_steward.adapters.postgres.metadata import (
-    canonical_observation,
-    current_observation_pointer,
     delivery_inbox,
+    work_attempt,
     work_record,
 )
+from github_steward.adapters.postgres.unit_of_work import PostgresUnitOfWork
+from github_steward.application.local_processing import SyntheticReceiptService
+from github_steward.domain.processing import WorkState
+from github_steward.ports.persistence import ClaimOutcome, DeliveryIngressOutcome
 
-NOW = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
-DIGEST_A = "a" * 64
-DIGEST_B = "b" * 64
+NOW = datetime(2026, 7, 31, 13, 0, 0, 654321, tzinfo=UTC)
 
 
-def _delivery_values(
-    *,
-    delivery_id: object,
-    provider_delivery_id: str,
-    digest: str,
-) -> dict[str, object]:
+class FixedClock:
+    def now(self) -> datetime:
+        return NOW
+
+
+def mapping(sequence: int) -> dict[str, object]:
     return {
-        "delivery_id": delivery_id,
-        "provider": "github",
-        "provider_delivery_id": provider_delivery_id,
-        "payload_digest": digest,
-        "received_at": NOW,
+        "entity_kind": "pull_request",
+        "entity_id": "concurrent",
+        "observed_at": "2026-07-31T13:00:00.654321Z",
+        "sequence": sequence,
+        "expected_pointer_version": None,
+        "observation": {"sequence": sequence},
     }
 
 
-def _work_values(*, work_id: object, delivery_id: object) -> dict[str, object]:
-    return {
-        "work_record_id": work_id,
-        "delivery_id": delivery_id,
-        "work_type": "INGEST_DELIVERY",
-        "state": "AVAILABLE",
-        "available_at": NOW,
-    }
+def service(engine: Engine) -> SyntheticReceiptService:
+    return SyntheticReceiptService(
+        unit_of_work_factory=lambda: PostgresUnitOfWork(engine),
+        clock=FixedClock(),
+        envelope_factory=envelope_payload,
+    )
 
 
-def test_delivery_and_work_commit_together_and_induced_failure_rolls_back(
-    postgres_engine: Engine,
-) -> None:
-    delivery_id = uuid4()
-    work_id = uuid4()
-    with postgres_engine.begin() as connection:
+def retire_claimable(engine: Engine) -> None:
+    with engine.begin() as connection:
         connection.execute(
-            delivery_inbox.insert().values(
-                **_delivery_values(
-                    delivery_id=delivery_id,
-                    provider_delivery_id="atomic-success",
-                    digest=DIGEST_A,
+            work_record.update()
+            .where(
+                work_record.c.state.in_(
+                    [WorkState.AVAILABLE.value, WorkState.RETRY_WAIT.value]
                 )
             )
+            .values(state=WorkState.SUCCEEDED.value)
         )
-        connection.execute(
-            work_record.insert().values(
-                **_work_values(work_id=work_id, delivery_id=delivery_id)
+
+
+def test_concurrent_same_digest_receipt_creates_exactly_one_work(
+    postgres_engine: Engine,
+) -> None:
+    barrier = Barrier(4)
+    outcomes: list[DeliveryIngressOutcome] = []
+
+    def receive() -> None:
+        barrier.wait()
+        outcomes.append(
+            service(postgres_engine)
+            .receive(
+                provider_delivery_id="concurrent-same",
+                mapping=mapping(1),
+            )
+            .outcome
+        )
+
+    threads = [Thread(target=receive) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert outcomes.count(DeliveryIngressOutcome.CREATED) == 1
+    assert outcomes.count(DeliveryIngressOutcome.DUPLICATE_SAME_DIGEST) == 3
+    with postgres_engine.connect() as connection:
+        delivery_id = connection.scalar(
+            sa.select(delivery_inbox.c.delivery_id).where(
+                delivery_inbox.c.provider_delivery_id == "concurrent-same"
             )
         )
-    with postgres_engine.connect() as connection:
         assert (
             connection.scalar(
                 sa.select(sa.func.count())
                 .select_from(work_record)
-                .where(work_record.c.work_record_id == work_id)
-            )
-            == 1
-        )
-
-    failed_delivery = uuid4()
-    with pytest.raises(IntegrityError), postgres_engine.begin() as connection:
-        connection.execute(
-            delivery_inbox.insert().values(
-                **_delivery_values(
-                    delivery_id=failed_delivery,
-                    provider_delivery_id="atomic-failure",
-                    digest=DIGEST_A,
-                )
-            )
-        )
-        connection.execute(
-            work_record.insert().values(
-                **_work_values(work_id=uuid4(), delivery_id=uuid4())
-            )
-        )
-    with postgres_engine.connect() as connection:
-        assert (
-            connection.scalar(
-                sa.select(sa.func.count())
-                .select_from(delivery_inbox)
-                .where(delivery_inbox.c.delivery_id == failed_delivery)
-            )
-            == 0
-        )
-
-
-def test_duplicate_delivery_same_and_different_digest_are_distinguishable(
-    postgres_engine: Engine,
-) -> None:
-    values = _delivery_values(
-        delivery_id=uuid4(),
-        provider_delivery_id="duplicate",
-        digest=DIGEST_A,
-    )
-    with postgres_engine.begin() as connection:
-        connection.execute(delivery_inbox.insert().values(**values))
-
-    def classify(candidate_digest: str) -> str:
-        candidate = _delivery_values(
-            delivery_id=uuid4(),
-            provider_delivery_id="duplicate",
-            digest=candidate_digest,
-        )
-        with postgres_engine.begin() as connection:
-            persisted = connection.execute(
-                sa.select(delivery_inbox.c.payload_digest).where(
-                    delivery_inbox.c.provider == "github",
-                    delivery_inbox.c.provider_delivery_id == "duplicate",
-                )
-            ).scalar_one()
-            nested = connection.begin_nested()
-            with pytest.raises(IntegrityError):
-                connection.execute(delivery_inbox.insert().values(**candidate))
-            nested.rollback()
-            if persisted == candidate_digest:
-                return "DUPLICATE_SAME_DIGEST"
-            return "INTEGRITY_FAILURE_DIFFERENT_DIGEST"
-
-    assert classify(DIGEST_A) == "DUPLICATE_SAME_DIGEST"
-    assert classify(DIGEST_B) == "INTEGRITY_FAILURE_DIFFERENT_DIGEST"
-
-    with postgres_engine.connect() as connection:
-        persisted = connection.execute(
-            sa.select(delivery_inbox.c.payload_digest).where(
-                delivery_inbox.c.provider == "github",
-                delivery_inbox.c.provider_delivery_id == "duplicate",
-            )
-        ).scalar_one()
-        assert persisted == DIGEST_A
-        assert (
-            connection.scalar(
-                sa.select(sa.func.count())
-                .select_from(delivery_inbox)
-                .where(
-                    delivery_inbox.c.provider == "github",
-                    delivery_inbox.c.provider_delivery_id == "duplicate",
-                )
+                .where(work_record.c.delivery_id == delivery_id)
             )
             == 1
         )
 
 
-def _insert_observation(connection: Connection, entity_id: str) -> object:
-    identifier = uuid4()
-    connection.execute(
-        canonical_observation.insert().values(
-            observation_version_id=identifier,
-            entity_kind="pull_request",
-            entity_id=entity_id,
-            schema_id="github.pull-request",
-            schema_version=1,
-            observed_at=NOW,
-            canonical_payload={"id": entity_id},
-            digest_format="jcs-sha256/v1",
-            digest_value=DIGEST_A,
-        )
-    )
-    return identifier
-
-
-def test_pointer_compare_and_swap_succeeds_once_and_stale_updates_zero_rows(
+def test_concurrent_different_digests_never_overwrite_durable_payload(
     postgres_engine: Engine,
 ) -> None:
-    with postgres_engine.begin() as connection:
-        first = _insert_observation(connection, "cas")
-        second = _insert_observation(connection, "cas")
-        connection.execute(
-            current_observation_pointer.insert().values(
-                entity_kind="pull_request",
-                entity_id="cas",
-                observation_version_id=first,
-                ordering_key={"updated_at": "1"},
-                pointer_version=0,
-            )
-        )
-        statement = (
-            current_observation_pointer.update()
-            .where(
-                current_observation_pointer.c.entity_kind == "pull_request",
-                current_observation_pointer.c.entity_id == "cas",
-                current_observation_pointer.c.pointer_version == 0,
-            )
-            .values(
-                observation_version_id=second,
-                ordering_key={"updated_at": "2"},
-                pointer_version=1,
-                updated_at=NOW,
-            )
-        )
-        assert connection.execute(statement).rowcount == 1
-        assert connection.execute(statement).rowcount == 0
-
-
-def test_two_connections_cannot_both_acquire_the_same_lease(
-    postgres_engine: Engine,
-) -> None:
-    delivery_id = uuid4()
-    work_id = uuid4()
-    with postgres_engine.begin() as connection:
-        connection.execute(
-            delivery_inbox.insert().values(
-                **_delivery_values(
-                    delivery_id=delivery_id,
-                    provider_delivery_id="lease",
-                    digest=DIGEST_A,
-                )
-            )
-        )
-        connection.execute(
-            work_record.insert().values(
-                **_work_values(work_id=work_id, delivery_id=delivery_id)
-            )
-        )
-
     barrier = Barrier(2)
-    outcomes: list[int] = []
+    outcomes: list[tuple[int, DeliveryIngressOutcome]] = []
 
-    def contend(owner: str) -> None:
-        with postgres_engine.begin() as connection:
-            barrier.wait()
-            result = connection.execute(
-                work_record.update()
-                .where(
-                    work_record.c.work_record_id == work_id,
-                    work_record.c.version == 0,
-                    work_record.c.lease_token.is_(None),
-                )
-                .values(
-                    lease_owner=owner,
-                    lease_token=uuid4(),
-                    lease_expires_at=NOW + timedelta(minutes=5),
-                    version=1,
-                    updated_at=NOW,
-                )
-            )
-            outcomes.append(result.rowcount)
+    def receive(sequence: int) -> None:
+        barrier.wait()
+        outcome = service(postgres_engine).receive(
+            provider_delivery_id="concurrent-conflict",
+            mapping=mapping(sequence),
+        )
+        outcomes.append((sequence, outcome.outcome))
 
-    contenders = [Thread(target=contend, args=(f"worker-{index}",)) for index in (1, 2)]
-    for contender in contenders:
-        contender.start()
-    for contender in contenders:
-        contender.join()
-    assert sorted(outcomes) == [0, 1]
+    threads = [Thread(target=receive, args=(sequence,)) for sequence in (2, 3)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcome for _, outcome in outcomes) == sorted(
+        [
+            DeliveryIngressOutcome.CREATED,
+            DeliveryIngressOutcome.INTEGRITY_FAILURE_DIFFERENT_DIGEST,
+        ]
+    )
+    durable_sequence = next(
+        sequence
+        for sequence, outcome in outcomes
+        if outcome is DeliveryIngressOutcome.CREATED
+    )
     with postgres_engine.connect() as connection:
+        row = (
+            connection.execute(
+                sa.select(
+                    delivery_inbox.c.canonical_payload,
+                    delivery_inbox.c.payload_digest,
+                ).where(delivery_inbox.c.provider_delivery_id == "concurrent-conflict")
+            )
+            .mappings()
+            .one()
+        )
+        assert row["canonical_payload"] == mapping(durable_sequence)
+        assert (
+            row["payload_digest"]
+            == envelope_payload(mapping(durable_sequence)).digest.value
+        )
+
+
+def test_skip_locked_concurrent_claim_creates_one_unique_attempt(
+    postgres_engine: Engine,
+) -> None:
+    retire_claimable(postgres_engine)
+    created = service(postgres_engine).receive(
+        provider_delivery_id="concurrent-claim",
+        mapping=mapping(4),
+    )
+    barrier = Barrier(2)
+    outcomes: list[ClaimOutcome] = []
+
+    def claim(owner: str) -> None:
+        with PostgresUnitOfWork(postgres_engine) as unit:
+            barrier.wait()
+            result = unit.work.claim_next(owner=owner, now=NOW)
+            unit.commit()
+        outcomes.append(result.outcome)
+
+    threads = [Thread(target=claim, args=(f"worker-{number}",)) for number in (1, 2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcomes) == sorted([ClaimOutcome.CLAIMED, ClaimOutcome.NO_WORK])
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.scalar(
+                sa.select(sa.func.count())
+                .select_from(work_attempt)
+                .where(work_attempt.c.work_record_id == created.work_record_id)
+            )
+            == 1
+        )
         row = connection.execute(
             sa.select(
+                work_record.c.state,
                 work_record.c.lease_owner,
+                work_record.c.lease_token,
                 work_record.c.lease_expires_at,
                 work_record.c.version,
-            ).where(work_record.c.work_record_id == work_id)
+            ).where(work_record.c.work_record_id == created.work_record_id)
         ).one()
+        assert row.state == WorkState.PROCESSING.value
         assert row.lease_owner in {"worker-1", "worker-2"}
-        assert row.lease_expires_at == NOW + timedelta(minutes=5)
+        assert row.lease_token is not None
+        assert row.lease_expires_at is not None
         assert row.version == 1
-
-
-def test_lease_release_requires_matching_token_and_version_and_clears_fields(
-    postgres_engine: Engine,
-) -> None:
-    delivery_id = uuid4()
-    work_id = uuid4()
-    lease_token = uuid4()
-    with postgres_engine.begin() as connection:
-        connection.execute(
-            delivery_inbox.insert().values(
-                **_delivery_values(
-                    delivery_id=delivery_id,
-                    provider_delivery_id="guarded-release",
-                    digest=DIGEST_A,
-                )
-            )
-        )
-        connection.execute(
-            work_record.insert().values(
-                **_work_values(work_id=work_id, delivery_id=delivery_id),
-                lease_owner="worker-1",
-                lease_token=lease_token,
-                lease_expires_at=NOW + timedelta(minutes=5),
-                version=1,
-            )
-        )
-
-        def release(*, token: object, version: int) -> int:
-            return connection.execute(
-                work_record.update()
-                .where(
-                    work_record.c.work_record_id == work_id,
-                    work_record.c.lease_token == token,
-                    work_record.c.version == version,
-                )
-                .values(
-                    lease_owner=None,
-                    lease_token=None,
-                    lease_expires_at=None,
-                    version=work_record.c.version + 1,
-                    updated_at=NOW,
-                )
-            ).rowcount
-
-        assert release(token=uuid4(), version=1) == 0
-        assert release(token=lease_token, version=0) == 0
-        assert release(token=lease_token, version=1) == 1
-        assert release(token=lease_token, version=1) == 0
-
-        released = connection.execute(
-            sa.select(
-                work_record.c.lease_owner,
-                work_record.c.lease_token,
-                work_record.c.lease_expires_at,
-                work_record.c.version,
-            ).where(work_record.c.work_record_id == work_id)
-        ).one()
-        assert released.lease_owner is None
-        assert released.lease_token is None
-        assert released.lease_expires_at is None
-        assert released.version == 2
-
-        replacement_token = uuid4()
-        assert (
-            connection.execute(
-                work_record.update()
-                .where(
-                    work_record.c.work_record_id == work_id,
-                    work_record.c.lease_token.is_(None),
-                    work_record.c.version == 2,
-                )
-                .values(
-                    lease_owner="worker-2",
-                    lease_token=replacement_token,
-                    lease_expires_at=NOW + timedelta(minutes=10),
-                    version=3,
-                    updated_at=NOW,
-                )
-            ).rowcount
-            == 1
-        )
-        assert release(token=lease_token, version=3) == 0
-        assert release(token=replacement_token, version=3) == 1
-
-        released_after_ownership_change = connection.execute(
-            sa.select(
-                work_record.c.lease_owner,
-                work_record.c.lease_token,
-                work_record.c.lease_expires_at,
-                work_record.c.version,
-            ).where(work_record.c.work_record_id == work_id)
-        ).one()
-        assert released_after_ownership_change.lease_owner is None
-        assert released_after_ownership_change.lease_token is None
-        assert released_after_ownership_change.lease_expires_at is None
-        assert released_after_ownership_change.version == 4
-
-
-def test_lease_expiry_reacquisition_uses_explicit_deterministic_cas(
-    postgres_engine: Engine,
-) -> None:
-    delivery_id = uuid4()
-    work_id = uuid4()
-    original_token = uuid4()
-    expiry = NOW + timedelta(minutes=5)
-    replacement_token = uuid4()
-    with postgres_engine.begin() as connection:
-        connection.execute(
-            delivery_inbox.insert().values(
-                **_delivery_values(
-                    delivery_id=delivery_id,
-                    provider_delivery_id="deterministic-expiry",
-                    digest=DIGEST_A,
-                )
-            )
-        )
-        connection.execute(
-            work_record.insert().values(
-                **_work_values(work_id=work_id, delivery_id=delivery_id),
-                lease_owner="worker-1",
-                lease_token=original_token,
-                lease_expires_at=expiry,
-                version=1,
-            )
-        )
-
-        def reacquire(*, at: datetime, expected_version: int) -> int:
-            return connection.execute(
-                work_record.update()
-                .where(
-                    work_record.c.work_record_id == work_id,
-                    work_record.c.version == expected_version,
-                    work_record.c.lease_expires_at <= at,
-                )
-                .values(
-                    lease_owner="worker-2",
-                    lease_token=replacement_token,
-                    lease_expires_at=at + timedelta(minutes=5),
-                    version=work_record.c.version + 1,
-                    updated_at=at,
-                )
-            ).rowcount
-
-        assert reacquire(at=expiry - timedelta(microseconds=1), expected_version=1) == 0
-        assert reacquire(at=expiry, expected_version=0) == 0
-        assert reacquire(at=expiry, expected_version=1) == 1
-        assert reacquire(at=expiry, expected_version=1) == 0
-
-        reacquired = connection.execute(
-            sa.select(
-                work_record.c.lease_owner,
-                work_record.c.lease_token,
-                work_record.c.lease_expires_at,
-                work_record.c.version,
-            ).where(work_record.c.work_record_id == work_id)
-        ).one()
-        assert reacquired.lease_owner == "worker-2"
-        assert reacquired.lease_token == replacement_token
-        assert reacquired.lease_expires_at == expiry + timedelta(minutes=5)
-        assert reacquired.version == 2
-
-    assert "external_retry_authority" not in work_record.c

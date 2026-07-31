@@ -18,6 +18,10 @@ from github_steward.adapters.postgres.metadata import (
     analysis_view_observation,
     audit_event,
     canonical_observation,
+    current_observation_pointer,
+    delivery_inbox,
+    work_attempt,
+    work_record,
 )
 from github_steward.domain.errors import CanonicalizationError
 
@@ -53,6 +57,24 @@ def _insert_analysis_view(connection: Connection) -> UUID:
             canonical_payload={"ok": True},
             digest_format="jcs-sha256/v1",
             digest_value=DIGEST,
+        )
+    )
+    return identifier
+
+
+def _insert_delivery(connection: Connection, suffix: str = "schema") -> UUID:
+    identifier = uuid4()
+    connection.execute(
+        delivery_inbox.insert().values(
+            delivery_id=identifier,
+            provider="synthetic",
+            provider_delivery_id=f"{suffix}-{identifier}",
+            payload_digest=DIGEST,
+            received_at=NOW,
+            payload_schema_id="github-steward.synthetic-delivery",
+            payload_schema_version=1,
+            canonical_payload={"value": suffix},
+            payload_digest_format="jcs-sha256/v1",
         )
     )
     return identifier
@@ -94,7 +116,7 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
             (
                 "current_observation_pointer",
                 "canonical_observation",
-                "fk_current_observation_pointer_observation",
+                "fk_current_observation_pointer_entity_observation",
             ),
             (
                 "analysis_view_observation",
@@ -127,6 +149,32 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
             )
             for table_name in APPEND_ONLY_TABLE_NAMES
         }
+    assert {column["name"] for column in inspector.get_columns("delivery_inbox")} == {
+        "delivery_id",
+        "provider",
+        "provider_delivery_id",
+        "payload_digest",
+        "received_at",
+        "payload_schema_id",
+        "payload_schema_version",
+        "canonical_payload",
+        "payload_digest_format",
+    }
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("work_record")
+    } >= {
+        "ck_work_record_state_inventory",
+        "ck_work_record_state_lease_consistency",
+    }
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("work_attempt")
+    } >= {
+        "ck_work_attempt_state_inventory",
+        "ck_work_attempt_state_timestamp_consistency",
+        "ck_work_attempt_number_positive",
+    }
 
 
 @pytest.mark.parametrize("table_name", APPEND_ONLY_TABLE_NAMES)
@@ -139,7 +187,12 @@ def test_append_only_trigger_rejects_update_and_delete(
     with postgres_engine.begin() as connection:
         observation_id = _insert_observation(connection)
         parameters: tuple[object, ...]
-        if table_name == "analysis_view_observation":
+        if table_name == "delivery_inbox":
+            identifier = _insert_delivery(connection, operation)
+            predicate = "delivery_id = %s"
+            parameters = (identifier,)
+            assignment = "payload_digest = payload_digest"
+        elif table_name == "analysis_view_observation":
             view_id = _insert_analysis_view(connection)
             connection.execute(
                 analysis_view_observation.insert().values(
@@ -229,6 +282,58 @@ def test_analysis_view_references_immutable_versions_and_enforces_uniqueness(
         assert "current" not in {
             column.name for column in analysis_view_observation.columns
         }
+
+
+def test_pointer_composite_foreign_key_rejects_cross_entity_reference(
+    postgres_engine: Engine,
+) -> None:
+    with postgres_engine.begin() as connection:
+        observation_id = _insert_observation(connection)
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                current_observation_pointer.insert().values(
+                    entity_kind="pull_request",
+                    entity_id="different",
+                    observation_version_id=observation_id,
+                    ordering_key={"sequence": "1"},
+                    pointer_version=0,
+                    updated_at=NOW,
+                )
+            )
+
+
+@pytest.mark.parametrize(
+    ("table", "values"),
+    [
+        (
+            work_record,
+            {
+                "work_record_id": uuid4(),
+                "delivery_id": uuid4(),
+                "work_type": "PROCESS_SYNTHETIC_OBSERVATION",
+                "state": "UNKNOWN",
+                "available_at": NOW,
+            },
+        ),
+        (
+            work_attempt,
+            {
+                "work_attempt_id": uuid4(),
+                "work_record_id": uuid4(),
+                "attempt_number": 1,
+                "state": "UNKNOWN",
+                "started_at": NOW,
+            },
+        ),
+    ],
+)
+def test_exact_state_inventories_reject_unknown_values(
+    postgres_engine: Engine,
+    table: sa.Table,
+    values: dict[str, object],
+) -> None:
+    with pytest.raises(IntegrityError), postgres_engine.begin() as connection:
+        connection.execute(table.insert().values(**values))
 
 
 def test_sqlalchemy_row_mapping_cannot_cross_canonical_boundary(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+import pytest
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
@@ -21,6 +22,7 @@ EXPECTED_TABLES = {
     "audit_event",
 }
 EXPECTED_APPEND_ONLY_TABLES = {
+    "delivery_inbox",
     "canonical_observation",
     "analysis_view",
     "analysis_view_observation",
@@ -60,13 +62,22 @@ def _append_only_trigger_tables(engine: Engine) -> set[str]:
         )
 
 
-def test_exactly_one_root_revision_and_one_head() -> None:
+def _truncate_application_data(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "TRUNCATE TABLE " + ", ".join(sorted(EXPECTED_TABLES)) + " CASCADE"
+        )
+
+
+def test_exactly_two_linear_revisions_and_one_head() -> None:
     script = ScriptDirectory.from_config(_config())
     revisions = list(script.walk_revisions())
-    assert len(revisions) == 1
-    assert revisions[0].revision == "gs_i1_0001"
-    assert revisions[0].down_revision is None
-    assert script.get_heads() == ["gs_i1_0001"]
+    assert len(revisions) == 2
+    assert revisions[0].revision == "gs_i2_0002"
+    assert revisions[0].down_revision == "gs_i1_0001"
+    assert revisions[1].revision == "gs_i1_0001"
+    assert revisions[1].down_revision is None
+    assert script.get_heads() == ["gs_i2_0002"]
 
 
 def test_transactional_downgrade_and_reupgrade(
@@ -76,8 +87,53 @@ def test_transactional_downgrade_and_reupgrade(
     assert os.environ["GS_TEST_DATABASE_URL"] == postgres_database_url
     assert _application_tables(postgres_engine) == EXPECTED_TABLES
     assert _append_only_trigger_tables(postgres_engine) == EXPECTED_APPEND_ONLY_TABLES
-    command.downgrade(_config(), "base")
-    assert _application_tables(postgres_engine) == set()
+    _truncate_application_data(postgres_engine)
+    command.downgrade(_config(), "gs_i1_0001")
+    assert _application_tables(postgres_engine) == EXPECTED_TABLES
+    assert _append_only_trigger_tables(postgres_engine) == (
+        EXPECTED_APPEND_ONLY_TABLES - {"delivery_inbox"}
+    )
     command.upgrade(_config(), "head")
     assert _application_tables(postgres_engine) == EXPECTED_TABLES
     assert _append_only_trigger_tables(postgres_engine) == EXPECTED_APPEND_ONLY_TABLES
+
+
+def test_nonempty_inbox_migration_fails_closed_and_can_recover(
+    postgres_engine: Engine,
+) -> None:
+    command.downgrade(_config(), "gs_i1_0001")
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO delivery_inbox "
+                "(delivery_id, provider, provider_delivery_id, payload_digest, "
+                "received_at) VALUES "
+                "('00000000-0000-0000-0000-000000000001', 'synthetic', "
+                "'historical', :digest, CURRENT_TIMESTAMP)"
+            ),
+            {"digest": "a" * 64},
+        )
+    try:
+        with pytest.raises(Exception, match="refuses to identify payloads"):
+            command.upgrade(_config(), "head")
+        with postgres_engine.begin() as connection:
+            connection.execute(sa.text("DELETE FROM delivery_inbox"))
+        command.upgrade(_config(), "head")
+    finally:
+        with postgres_engine.connect() as connection:
+            revision = connection.scalar(
+                sa.text("SELECT version_num FROM alembic_version")
+            )
+        if revision != "gs_i2_0002":
+            command.upgrade(_config(), "head")
+
+
+def test_offline_sql_generation_contains_both_revisions(
+    postgres_database_url: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert postgres_database_url
+    command.upgrade(_config(), "head", sql=True)
+    output = capsys.readouterr().out
+    assert "Running upgrade  -> gs_i1_0001" in output
+    assert "Running upgrade gs_i1_0001 -> gs_i2_0002" in output

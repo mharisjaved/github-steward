@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import tomllib
 from collections.abc import Iterator
 
@@ -59,6 +60,15 @@ def test_runtime_source_never_imports_migrations_or_alembic() -> None:
     assert "alembic" not in {name.split(".")[0] for name in imports}
 
 
+def test_only_clock_infrastructure_reads_wall_clock() -> None:
+    implicit_readers = {
+        path.relative_to(SRC).as_posix()
+        for path in SRC.rglob("*.py")
+        if "datetime.now(" in path.read_text()
+    }
+    assert implicit_readers == {"infrastructure/clock.py"}
+
+
 def test_exactly_eight_core_tables_and_no_orm() -> None:
     assert tuple(metadata.tables) == TABLE_NAMES
     assert len(metadata.tables) == 8
@@ -74,14 +84,69 @@ def test_exactly_eight_core_tables_and_no_orm() -> None:
         assert prohibited not in source_text
 
 
-def test_immutable_analysis_view_association_is_append_only() -> None:
+def test_exactly_five_append_only_targets() -> None:
     assert APPEND_ONLY_TABLE_NAMES == (
+        "delivery_inbox",
         "canonical_observation",
         "analysis_view",
         "analysis_view_observation",
         "audit_event",
     )
     assert set(APPEND_ONLY_TABLE_NAMES) <= set(TABLE_NAMES)
+
+
+def test_application_imports_only_domain_and_ports_with_no_remote_technology() -> None:
+    imports = _module_imports("application")
+    prohibited = {
+        "sqlalchemy",
+        "psycopg",
+        "alembic",
+        "rfc8785",
+        "requests",
+        "httpx",
+        "fastapi",
+        "flask",
+        "django",
+        "redis",
+        "celery",
+        "github",
+        "openai",
+        "langchain",
+    }
+    assert not {name.split(".")[0] for name in imports} & prohibited
+    assert not {
+        name
+        for name in imports
+        if name.startswith("github_steward.")
+        and not name.startswith(("github_steward.domain", "github_steward.ports"))
+    }
+
+
+def test_exactly_two_linear_alembic_revisions() -> None:
+    revision_files = sorted((ROOT / "migrations" / "versions").glob("*.py"))
+    assert [path.name for path in revision_files] == [
+        "0001_gs_i1_foundation.py",
+        "0002_gs_i2_durable_processing.py",
+    ]
+    identities = []
+    for path in revision_files:
+        source = path.read_text()
+        revision_match = re.search(r'^revision: str = "([^"]+)"$', source, re.MULTILINE)
+        down_revision_match = re.search(
+            r"^down_revision: str \| None = (.+)$", source, re.MULTILINE
+        )
+        assert revision_match is not None
+        assert down_revision_match is not None
+        identities.append(
+            (
+                revision_match.group(1),
+                down_revision_match.group(1),
+            )
+        )
+    assert identities == [
+        ("gs_i1_0001", "None"),
+        ("gs_i2_0002", '"gs_i1_0001"'),
+    ]
 
 
 def test_dependency_categories_are_bounded() -> None:

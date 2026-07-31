@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -14,24 +13,50 @@ from github_steward.domain.canonical import (
     Digest,
     freeze_canonical_value,
 )
+from github_steward.domain.processing import FailureKind, WorkState
 
 DeliveryId = NewType("DeliveryId", str)
 WorkRecordId = NewType("WorkRecordId", str)
+WorkAttemptId = NewType("WorkAttemptId", str)
 ObservationVersionId = NewType("ObservationVersionId", str)
 AnalysisViewId = NewType("AnalysisViewId", str)
 AuditEventId = NewType("AuditEventId", str)
 LeaseToken = NewType("LeaseToken", str)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class Delivery:
     """A canonical delivery accepted at the persistence boundary."""
 
     delivery_id: DeliveryId
     provider: str
     provider_delivery_id: str
+    payload_schema_id: str
+    payload_schema_version: int
+    payload: CanonicalValue
     payload_digest: Digest
     received_at: datetime
+
+    def __init__(
+        self,
+        *,
+        delivery_id: DeliveryId,
+        provider: str,
+        provider_delivery_id: str,
+        payload_schema_id: str,
+        payload_schema_version: int,
+        payload: object,
+        payload_digest: Digest,
+        received_at: datetime,
+    ) -> None:
+        object.__setattr__(self, "delivery_id", delivery_id)
+        object.__setattr__(self, "provider", provider)
+        object.__setattr__(self, "provider_delivery_id", provider_delivery_id)
+        object.__setattr__(self, "payload_schema_id", payload_schema_id)
+        object.__setattr__(self, "payload_schema_version", payload_schema_version)
+        object.__setattr__(self, "payload", freeze_canonical_value(payload))
+        object.__setattr__(self, "payload_digest", payload_digest)
+        object.__setattr__(self, "received_at", received_at)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,21 +103,38 @@ class CanonicalObservationRecord:
         object.__setattr__(self, "digest", digest)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class ObservationPointer:
-    """A mutable current pointer represented as a versioned value."""
+    """A current pointer represented as an immutable versioned value."""
 
     entity_kind: str
     entity_id: str
     observation_version_id: ObservationVersionId
-    ordering_key: Mapping[str, CanonicalValue]
+    ordering_key: CanonicalValue
     pointer_version: int
     updated_at: datetime
+
+    def __init__(
+        self,
+        *,
+        entity_kind: str,
+        entity_id: str,
+        observation_version_id: ObservationVersionId,
+        ordering_key: object,
+        pointer_version: int,
+        updated_at: datetime,
+    ) -> None:
+        object.__setattr__(self, "entity_kind", entity_kind)
+        object.__setattr__(self, "entity_id", entity_id)
+        object.__setattr__(self, "observation_version_id", observation_version_id)
+        object.__setattr__(self, "ordering_key", freeze_canonical_value(ordering_key))
+        object.__setattr__(self, "pointer_version", pointer_version)
+        object.__setattr__(self, "updated_at", updated_at)
 
 
 @dataclass(frozen=True, slots=True)
 class WorkLease:
-    """An opaque lease; expiry does not authorize an external retry."""
+    """An opaque, guarded work lease."""
 
     work_record_id: WorkRecordId
     owner: str
@@ -167,12 +209,97 @@ class AuditEventRecord:
         object.__setattr__(self, "digest", digest)
 
 
-class DeliveryIngressResult(StrEnum):
+class DeliveryIngressOutcome(StrEnum):
     """Deterministic delivery-ingress outcomes."""
 
     CREATED = "CREATED"
     DUPLICATE_SAME_DIGEST = "DUPLICATE_SAME_DIGEST"
     INTEGRITY_FAILURE_DIFFERENT_DIGEST = "INTEGRITY_FAILURE_DIFFERENT_DIGEST"
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryIngressResult:
+    """A receipt classification bound to the durable original identities."""
+
+    outcome: DeliveryIngressOutcome
+    delivery_id: DeliveryId
+    work_record_id: WorkRecordId
+
+
+class ClaimOutcome(StrEnum):
+    """Bounded claim outcomes."""
+
+    CLAIMED = "CLAIMED"
+    NO_WORK = "NO_WORK"
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class ClaimedWork:
+    """Immutable processing input returned by the committed T2 claim."""
+
+    lease: WorkLease
+    attempt_id: WorkAttemptId
+    attempt_number: int
+    delivery_id: DeliveryId
+    payload: CanonicalValue
+    payload_digest: Digest
+
+    def __init__(
+        self,
+        *,
+        lease: WorkLease,
+        attempt_id: WorkAttemptId,
+        attempt_number: int,
+        delivery_id: DeliveryId,
+        payload: object,
+        payload_digest: Digest,
+    ) -> None:
+        object.__setattr__(self, "lease", lease)
+        object.__setattr__(self, "attempt_id", attempt_id)
+        object.__setattr__(self, "attempt_number", attempt_number)
+        object.__setattr__(self, "delivery_id", delivery_id)
+        object.__setattr__(self, "payload", freeze_canonical_value(payload))
+        object.__setattr__(self, "payload_digest", payload_digest)
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimResult:
+    """A deterministic claim or no-work result."""
+
+    outcome: ClaimOutcome
+    claimed_work: ClaimedWork | None
+
+
+class LeaseOperationOutcome(StrEnum):
+    """Explicit guarded lease-operation outcomes."""
+
+    SUCCEEDED = "SUCCEEDED"
+    STALE = "STALE"
+
+
+@dataclass(frozen=True, slots=True)
+class LeaseOperationResult:
+    """Result of renewal, release, success, or failure completion."""
+
+    outcome: LeaseOperationOutcome
+    lease: WorkLease | None = None
+    work_state: WorkState | None = None
+
+
+class PointerCreateOutcome(StrEnum):
+    """Create-if-absent outcomes."""
+
+    CREATED = "CREATED"
+    CONFLICT = "CONFLICT"
+
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationResult:
+    """Deterministic counts from one bounded expired-work pass."""
+
+    reconciled: int
+    retry_scheduled: int
+    terminally_failed: int
 
 
 class CanonicalObservationRepository(Protocol):
@@ -183,7 +310,13 @@ class CanonicalObservationRepository(Protocol):
 
 
 class CurrentObservationPointerRepository(Protocol):
-    """Current-pointer compare-and-swap storage."""
+    """Current-pointer create and compare-and-swap storage."""
+
+    def create_if_absent(
+        self,
+        pointer: ObservationPointer,
+    ) -> PointerCreateOutcome:
+        """Create version zero only when no entity pointer exists."""
 
     def compare_and_swap(
         self,
@@ -225,11 +358,43 @@ class WorkLeaseRepository(Protocol):
         """Release only the matching opaque lease token and version."""
 
 
+class WorkProcessingRepository(Protocol):
+    """Bounded durable local-work operations."""
+
+    def claim_next(self, *, owner: str, now: datetime) -> ClaimResult:
+        """Claim one eligible item and create its STARTED attempt atomically."""
+
+    def renew(self, *, lease: WorkLease, now: datetime) -> LeaseOperationResult:
+        """Renew only current, unexpired ownership."""
+
+    def complete_success(
+        self,
+        *,
+        lease: WorkLease,
+        attempt_number: int,
+        now: datetime,
+    ) -> LeaseOperationResult:
+        """Complete attempt and work atomically for current ownership."""
+
+    def complete_failure(
+        self,
+        *,
+        lease: WorkLease,
+        attempt_number: int,
+        now: datetime,
+        failure_kind: FailureKind,
+    ) -> LeaseOperationResult:
+        """Persist a classified attempt/work failure for current ownership."""
+
+    def reconcile_expired(self, *, now: datetime) -> ReconciliationResult:
+        """Reconcile one bounded ordered batch of expired work."""
+
+
 class AnalysisViewRepository(Protocol):
     """Immutable analysis-view storage."""
 
     def insert(self, view: AnalysisViewRecord) -> None:
-        """Insert a view; no update or delete operation is exposed."""
+        """Insert a view and immutable associations without update/delete."""
 
 
 class AuditEventRepository(Protocol):
@@ -258,3 +423,38 @@ class UnitOfWork(Protocol):
 
     def rollback(self) -> None:
         """Roll back the transaction."""
+
+
+class ProcessingUnitOfWork(UnitOfWork, Protocol):
+    """Minimal repository set used by bounded GS-I2 services."""
+
+    @property
+    def inbox(self) -> InboxWorkRepository:
+        """Return the transaction-bound inbox repository."""
+
+    @property
+    def work(self) -> WorkProcessingRepository:
+        """Return the transaction-bound processing repository."""
+
+    @property
+    def observations(self) -> CanonicalObservationRepository:
+        """Return the transaction-bound observation repository."""
+
+    @property
+    def pointers(self) -> CurrentObservationPointerRepository:
+        """Return the transaction-bound pointer repository."""
+
+    @property
+    def views(self) -> AnalysisViewRepository:
+        """Return the transaction-bound analysis-view repository."""
+
+    @property
+    def audits(self) -> AuditEventRepository:
+        """Return the transaction-bound audit repository."""
+
+
+class ProcessingUnitOfWorkFactory(Protocol):
+    """Create a fresh explicit PostgreSQL transaction boundary."""
+
+    def __call__(self) -> ProcessingUnitOfWork:
+        """Return an unentered unit of work."""

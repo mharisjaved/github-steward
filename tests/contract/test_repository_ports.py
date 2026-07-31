@@ -22,15 +22,21 @@ from github_steward.ports.persistence import (
     CanonicalObservationRecord,
     CanonicalObservationRepository,
     CurrentObservationPointerRepository,
+    Delivery,
+    DeliveryId,
+    DeliveryIngressOutcome,
+    DeliveryIngressResult,
     InboxWorkRepository,
     ObservationVersionId,
     UnitOfWork,
     WorkLeaseRepository,
+    WorkProcessingRepository,
+    WorkRecordId,
 )
 
 NOW = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
 type ImmutableRecord = (
-    CanonicalObservationRecord | AnalysisViewRecord | AuditEventRecord
+    Delivery | CanonicalObservationRecord | AnalysisViewRecord | AuditEventRecord
 )
 
 
@@ -49,8 +55,18 @@ def test_append_only_ports_expose_no_update_or_delete() -> None:
 
 
 def test_mutable_ports_are_explicitly_cas_and_lease_oriented() -> None:
-    assert _public_methods(CurrentObservationPointerRepository) == {"compare_and_swap"}
+    assert _public_methods(CurrentObservationPointerRepository) == {
+        "compare_and_swap",
+        "create_if_absent",
+    }
     assert _public_methods(WorkLeaseRepository) == {"acquire", "release"}
+    assert _public_methods(WorkProcessingRepository) == {
+        "claim_next",
+        "renew",
+        "complete_success",
+        "complete_failure",
+        "reconcile_expired",
+    }
     assert _public_methods(InboxWorkRepository) == {"create_delivery_and_work"}
     assert _public_methods(UnitOfWork) == {"commit", "rollback"}
 
@@ -60,6 +76,7 @@ def test_immutable_port_records_are_frozen_values() -> None:
         CanonicalObservationRecord,
         AnalysisViewRecord,
         AuditEventRecord,
+        Delivery,
     ):
         assert dataclasses.is_dataclass(record)
         assert vars(record)["__dataclass_params__"].frozen
@@ -68,6 +85,16 @@ def test_immutable_port_records_are_frozen_values() -> None:
 @pytest.mark.parametrize(
     "record",
     [
+        Delivery(
+            delivery_id=DeliveryId("delivery-1"),
+            provider="synthetic",
+            provider_delivery_id="provider-1",
+            payload_schema_id="synthetic",
+            payload_schema_version=1,
+            payload={"items": [{"value": 1}]},
+            payload_digest=Digest("9" * 64),
+            received_at=NOW,
+        ),
         CanonicalObservationRecord(
             version_id=ObservationVersionId("observation-1"),
             entity_kind="pull_request",
@@ -99,7 +126,7 @@ def test_immutable_port_records_are_frozen_values() -> None:
             digest=Digest("c" * 64),
         ),
     ],
-    ids=["canonical-observation", "analysis-view", "audit-event"],
+    ids=["delivery", "canonical-observation", "analysis-view", "audit-event"],
 )
 def test_immutable_port_record_payloads_reject_nested_mutation(
     record: ImmutableRecord,
@@ -119,6 +146,16 @@ def test_immutable_port_record_payloads_reject_nested_mutation(
 @pytest.mark.parametrize(
     "record_factory",
     [
+        lambda payload: Delivery(
+            delivery_id=DeliveryId("delivery-2"),
+            provider="synthetic",
+            provider_delivery_id="provider-2",
+            payload_schema_id="synthetic",
+            payload_schema_version=1,
+            payload=payload,
+            payload_digest=Digest("9" * 64),
+            received_at=NOW,
+        ),
         lambda payload: CanonicalObservationRecord(
             version_id=ObservationVersionId("observation-2"),
             entity_kind="pull_request",
@@ -148,7 +185,7 @@ def test_immutable_port_record_payloads_reject_nested_mutation(
             digest=Digest("f" * 64),
         ),
     ],
-    ids=["canonical-observation", "analysis-view", "audit-event"],
+    ids=["delivery", "canonical-observation", "analysis-view", "audit-event"],
 )
 def test_immutable_port_records_copy_caller_owned_payload(
     record_factory: Callable[[object], ImmutableRecord],
@@ -167,3 +204,30 @@ def test_immutable_port_records_copy_caller_owned_payload(
     assert isinstance(nested, Mapping)
     assert nested["value"] == 1
     assert len(items) == 1
+
+
+def test_inbox_result_is_typed_and_carries_durable_identities() -> None:
+    result = DeliveryIngressResult(
+        DeliveryIngressOutcome.DUPLICATE_SAME_DIGEST,
+        DeliveryId("delivery"),
+        WorkRecordId("work"),
+    )
+    assert result.outcome is DeliveryIngressOutcome.DUPLICATE_SAME_DIGEST
+    assert result.delivery_id == "delivery"
+    assert result.work_record_id == "work"
+
+
+def test_repositories_never_expose_transaction_control() -> None:
+    repositories = (
+        CanonicalObservationRepository,
+        CurrentObservationPointerRepository,
+        InboxWorkRepository,
+        WorkLeaseRepository,
+        WorkProcessingRepository,
+        AnalysisViewRepository,
+        AuditEventRepository,
+    )
+    for repository in repositories:
+        methods = _public_methods(repository)
+        assert "commit" not in methods
+        assert "rollback" not in methods

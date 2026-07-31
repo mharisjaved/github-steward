@@ -1,4 +1,4 @@
-"""The bounded eight-table GS-I1 PostgreSQL metadata foundation."""
+"""The bounded eight-table GS-I2 PostgreSQL metadata model."""
 
 from __future__ import annotations
 
@@ -22,6 +22,10 @@ delivery_inbox = sa.Table(
     sa.Column("provider_delivery_id", sa.Text(), nullable=False),
     sa.Column("payload_digest", sa.Text(), nullable=False),
     sa.Column("received_at", _TIMESTAMP, nullable=False),
+    sa.Column("payload_schema_id", sa.Text(), nullable=False),
+    sa.Column("payload_schema_version", sa.Integer(), nullable=False),
+    sa.Column("canonical_payload", _JSONB, nullable=False),
+    sa.Column("payload_digest_format", sa.Text(), nullable=False),
     sa.PrimaryKeyConstraint("delivery_id", name="pk_delivery_inbox"),
     sa.UniqueConstraint(
         "provider",
@@ -39,6 +43,18 @@ delivery_inbox = sa.Table(
     sa.CheckConstraint(
         "payload_digest ~ '^[0-9a-f]{64}$'",
         name="ck_delivery_inbox_payload_digest_sha256",
+    ),
+    sa.CheckConstraint(
+        "payload_schema_id <> ''",
+        name="ck_delivery_inbox_payload_schema_id_nonempty",
+    ),
+    sa.CheckConstraint(
+        "payload_schema_version > 0",
+        name="ck_delivery_inbox_payload_schema_version_positive",
+    ),
+    sa.CheckConstraint(
+        "payload_digest_format = 'jcs-sha256/v1'",
+        name="ck_delivery_inbox_payload_digest_format",
     ),
 )
 
@@ -64,13 +80,18 @@ work_record = sa.Table(
     ),
     sa.UniqueConstraint("delivery_id", name="uq_work_record_delivery"),
     sa.CheckConstraint("work_type <> ''", name="ck_work_record_work_type_nonempty"),
-    sa.CheckConstraint("state <> ''", name="ck_work_record_state_nonempty"),
+    sa.CheckConstraint(
+        "state IN ('AVAILABLE', 'PROCESSING', 'RETRY_WAIT', 'SUCCEEDED', 'FAILED')",
+        name="ck_work_record_state_inventory",
+    ),
     sa.CheckConstraint("version >= 0", name="ck_work_record_version_nonnegative"),
     sa.CheckConstraint(
-        "(lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL) "
-        "OR (lease_owner IS NOT NULL AND lease_token IS NOT NULL "
-        "AND lease_expires_at IS NOT NULL)",
-        name="ck_work_record_lease_all_or_none",
+        "(state = 'PROCESSING' AND lease_owner IS NOT NULL "
+        "AND lease_owner <> '' AND lease_token IS NOT NULL "
+        "AND lease_expires_at IS NOT NULL) OR "
+        "(state <> 'PROCESSING' AND lease_owner IS NULL "
+        "AND lease_token IS NULL AND lease_expires_at IS NULL)",
+        name="ck_work_record_state_lease_consistency",
     ),
 )
 sa.Index(
@@ -108,10 +129,16 @@ work_attempt = sa.Table(
         "attempt_number > 0",
         name="ck_work_attempt_number_positive",
     ),
-    sa.CheckConstraint("state <> ''", name="ck_work_attempt_state_nonempty"),
     sa.CheckConstraint(
-        "completed_at IS NULL OR started_at IS NOT NULL",
-        name="ck_work_attempt_completion_requires_start",
+        "state IN ('STARTED', 'SUCCEEDED', 'RETRYABLE_FAILURE', "
+        "'TERMINAL_FAILURE', 'ABANDONED')",
+        name="ck_work_attempt_state_inventory",
+    ),
+    sa.CheckConstraint(
+        "(state = 'STARTED' AND started_at IS NOT NULL AND completed_at IS NULL) "
+        "OR (state <> 'STARTED' AND started_at IS NOT NULL "
+        "AND completed_at IS NOT NULL)",
+        name="ck_work_attempt_state_timestamp_consistency",
     ),
 )
 sa.Index("ix_work_attempt_state", work_attempt.c.state)
@@ -132,6 +159,12 @@ canonical_observation = sa.Table(
     sa.PrimaryKeyConstraint(
         "observation_version_id",
         name="pk_canonical_observation",
+    ),
+    sa.UniqueConstraint(
+        "entity_kind",
+        "entity_id",
+        "observation_version_id",
+        name="uq_canonical_observation_entity_version",
     ),
     sa.CheckConstraint(
         "entity_kind <> ''",
@@ -185,9 +218,13 @@ current_observation_pointer = sa.Table(
         name="pk_current_observation_pointer",
     ),
     sa.ForeignKeyConstraint(
-        ["observation_version_id"],
-        ["canonical_observation.observation_version_id"],
-        name="fk_current_observation_pointer_observation",
+        ["entity_kind", "entity_id", "observation_version_id"],
+        [
+            "canonical_observation.entity_kind",
+            "canonical_observation.entity_id",
+            "canonical_observation.observation_version_id",
+        ],
+        name="fk_current_observation_pointer_entity_observation",
     ),
     sa.CheckConstraint(
         "entity_kind <> ''",
@@ -317,6 +354,7 @@ TABLE_NAMES: Final = (
     "audit_event",
 )
 APPEND_ONLY_TABLE_NAMES: Final = (
+    "delivery_inbox",
     "canonical_observation",
     "analysis_view",
     "analysis_view_observation",
