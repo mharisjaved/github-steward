@@ -319,6 +319,7 @@ TABLE_NAMES: Final = (
 APPEND_ONLY_TABLE_NAMES: Final = (
     "canonical_observation",
     "analysis_view",
+    "analysis_view_observation",
     "audit_event",
 )
 

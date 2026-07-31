@@ -375,6 +375,7 @@ def upgrade() -> None:
     for table_name in (
         "canonical_observation",
         "analysis_view",
+        "analysis_view_observation",
         "audit_event",
     ):
         op.execute(

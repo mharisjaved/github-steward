@@ -54,13 +54,13 @@ acceptance_criteria:
   - id: "AC-0003"
     description: "Domain-oriented protocols expose append-only observation, view, and audit storage plus explicit pointer CAS, transactional inbox/work, lease, and unit-of-work boundaries without concrete production repositories."
   - id: "AC-0004"
-    description: "Synchronous SQLAlchemy Core metadata and one transactional Alembic root revision define exactly the eight authorized PostgreSQL tables with deterministic names and append-only UPDATE/DELETE rejection triggers."
+    description: "Synchronous SQLAlchemy Core metadata and one transactional Alembic root revision define exactly the eight authorized PostgreSQL tables with deterministic names and UPDATE/DELETE rejection triggers on canonical observations, analysis views, their immutable observation associations, and audit events."
   - id: "AC-0005"
     description: "Local PostgreSQL 16 integration evidence proves transaction rollback, delivery conflict classification, pointer CAS, lease contention, guarded release, deterministic expiry and reacquisition, immutable references, triggers, catalog invariants, and upgrade-downgrade-reupgrade behavior."
   - id: "AC-0006"
     description: "Locked Ruff, mypy, Import Linter, pytest, branch coverage, Alembic, catalog, and AFEF validation pass without changing the frozen project files."
   - id: "AC-0007"
-    description: "The candidate remains one local commit on the authorized branch with no GitHub access, remote Git action, deployment, publication, production role, or readiness overclaim."
+    description: "The candidate preserves the accepted root, the original one-commit GS-I1 implementation, and exactly two authorized direct-descendant correction commits on the local branch, with no history rewrite, IDE-Agent GitHub access, remote Git action, deployment, publication, production role, or readiness overclaim."
 related_decisions:
   - "GS-I1-PACKAGE-BOUNDARY"
   - "GS-I1-JCS-RFC8785"
@@ -151,8 +151,8 @@ The PostgreSQL foundation contains exactly:
 
 Immutable analysis-view links target observation version identifiers, never a
 mutable current pointer. Migration-owned triggers reject UPDATE and DELETE on
-canonical observations, analysis views, and audit events. Insert remains
-permitted.
+canonical observations, analysis views, their `analysis_view_observation`
+association rows, and audit events. Insert remains permitted.
 
 Append-only assurance is bounded as follows:
 
@@ -180,6 +180,21 @@ design decision changes. External evidence must include a credential-free
 record of the original mutable-phase disposable-database teardown incident and
 a self-contained Git bundle containing the accepted root, original GS-I1
 candidate, and direct-descendant correction.
+
+## GS-I1-CR2 correction boundary
+
+The Product Owner authorized one direct-descendant correction after the
+Independent Reviewer returned AMBER findings `GS-I1-IR-001` and
+`GS-I1-IR-002`. The existing root migration now applies the established
+append-only trigger function to `analysis_view_observation`, so an immutable
+analysis view cannot have its observation-version associations updated or
+deleted after insertion. No table or migration revision is added.
+
+AC-0007 and the work record distinguish the original one-commit
+implementation from the two subsequently authorized direct-descendant
+corrections. The four-commit repository history consists of the accepted root,
+the original GS-I1 implementation, CR1, and exactly one CR2 commit; none is
+amended, rebased, squashed, reset, replaced, or discarded.
 
 ## Migration and evidence boundary
 

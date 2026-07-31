@@ -20,6 +20,12 @@ EXPECTED_TABLES = {
     "analysis_view_observation",
     "audit_event",
 }
+EXPECTED_APPEND_ONLY_TABLES = {
+    "canonical_observation",
+    "analysis_view",
+    "analysis_view_observation",
+    "audit_event",
+}
 
 
 def _config() -> Config:
@@ -33,6 +39,22 @@ def _application_tables(engine: Engine) -> set[str]:
                 sa.text(
                     "SELECT tablename FROM pg_catalog.pg_tables "
                     "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
+                )
+            ).scalars()
+        )
+
+
+def _append_only_trigger_tables(engine: Engine) -> set[str]:
+    with engine.connect() as connection:
+        return set(
+            connection.execute(
+                sa.text(
+                    "SELECT c.relname FROM pg_trigger t "
+                    "JOIN pg_class c ON c.oid = t.tgrelid "
+                    "JOIN pg_proc p ON p.oid = t.tgfoid "
+                    "WHERE NOT t.tgisinternal "
+                    "AND c.relnamespace = 'public'::regnamespace "
+                    "AND p.proname = 'gs_i1_reject_append_only_mutation'"
                 )
             ).scalars()
         )
@@ -53,7 +75,9 @@ def test_transactional_downgrade_and_reupgrade(
 ) -> None:
     assert os.environ["GS_TEST_DATABASE_URL"] == postgres_database_url
     assert _application_tables(postgres_engine) == EXPECTED_TABLES
+    assert _append_only_trigger_tables(postgres_engine) == EXPECTED_APPEND_ONLY_TABLES
     command.downgrade(_config(), "base")
     assert _application_tables(postgres_engine) == set()
     command.upgrade(_config(), "head")
     assert _application_tables(postgres_engine) == EXPECTED_TABLES
+    assert _append_only_trigger_tables(postgres_engine) == EXPECTED_APPEND_ONLY_TABLES

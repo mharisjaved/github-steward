@@ -43,6 +43,21 @@ def _insert_observation(connection: Connection) -> UUID:
     return identifier
 
 
+def _insert_analysis_view(connection: Connection) -> UUID:
+    identifier = uuid4()
+    connection.execute(
+        analysis_view.insert().values(
+            analysis_view_id=identifier,
+            schema_id="analysis",
+            schema_version=1,
+            canonical_payload={"ok": True},
+            digest_format="jcs-sha256/v1",
+            digest_value=DIGEST,
+        )
+    )
+    return identifier
+
+
 def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
     postgres_engine: Engine,
 ) -> None:
@@ -123,19 +138,28 @@ def test_append_only_trigger_rejects_update_and_delete(
 ) -> None:
     with postgres_engine.begin() as connection:
         observation_id = _insert_observation(connection)
-        if table_name == "analysis_view":
-            identifier = uuid4()
+        parameters: tuple[object, ...]
+        if table_name == "analysis_view_observation":
+            view_id = _insert_analysis_view(connection)
             connection.execute(
-                analysis_view.insert().values(
-                    analysis_view_id=identifier,
-                    schema_id="analysis",
-                    schema_version=1,
-                    canonical_payload={"ok": True},
-                    digest_format="jcs-sha256/v1",
-                    digest_value=DIGEST,
+                analysis_view_observation.insert().values(
+                    analysis_view_id=view_id,
+                    observation_version_id=observation_id,
+                    facet_role_id="pull_request",
                 )
             )
+            predicate = (
+                "analysis_view_id = %s AND observation_version_id = %s "
+                "AND facet_role_id = %s"
+            )
+            parameters = (view_id, observation_id, "pull_request")
+            assignment = "facet_role_id = facet_role_id"
+        elif table_name == "analysis_view":
+            identifier = _insert_analysis_view(connection)
             key_column = "analysis_view_id"
+            predicate = f"{key_column} = %s"
+            parameters = (identifier,)
+            assignment = "digest_value = digest_value"
         elif table_name == "audit_event":
             identifier = uuid4()
             connection.execute(
@@ -152,21 +176,26 @@ def test_append_only_trigger_rejects_update_and_delete(
                 )
             )
             key_column = "audit_event_id"
+            predicate = f"{key_column} = %s"
+            parameters = (identifier,)
+            assignment = "digest_value = digest_value"
         else:
             identifier = observation_id
             key_column = "observation_version_id"
+            predicate = f"{key_column} = %s"
+            parameters = (identifier,)
+            assignment = "digest_value = digest_value"
         nested = connection.begin_nested()
         with pytest.raises(DBAPIError, match="append-only"):
             if operation == "update":
                 connection.exec_driver_sql(
-                    f"UPDATE {table_name} SET digest_value = digest_value "
-                    f"WHERE {key_column} = %s",
-                    (identifier,),
+                    f"UPDATE {table_name} SET {assignment} WHERE {predicate}",
+                    parameters,
                 )
             else:
                 connection.exec_driver_sql(
-                    f"DELETE FROM {table_name} WHERE {key_column} = %s",
-                    (identifier,),
+                    f"DELETE FROM {table_name} WHERE {predicate}",
+                    parameters,
                 )
         nested.rollback()
 

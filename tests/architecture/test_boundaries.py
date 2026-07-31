@@ -7,7 +7,11 @@ import pathlib
 import tomllib
 from collections.abc import Iterator
 
-from github_steward.adapters.postgres.metadata import TABLE_NAMES, metadata
+from github_steward.adapters.postgres.metadata import (
+    APPEND_ONLY_TABLE_NAMES,
+    TABLE_NAMES,
+    metadata,
+)
 
 ROOT = pathlib.Path(__file__).parents[2]
 SRC = ROOT / "src" / "github_steward"
@@ -68,6 +72,16 @@ def test_exactly_eight_core_tables_and_no_orm() -> None:
         "AsyncSession",
     ):
         assert prohibited not in source_text
+
+
+def test_immutable_analysis_view_association_is_append_only() -> None:
+    assert APPEND_ONLY_TABLE_NAMES == (
+        "canonical_observation",
+        "analysis_view",
+        "analysis_view_observation",
+        "audit_event",
+    )
+    assert set(APPEND_ONLY_TABLE_NAMES) <= set(TABLE_NAMES)
 
 
 def test_dependency_categories_are_bounded() -> None:
