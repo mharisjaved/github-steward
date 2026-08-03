@@ -1,0 +1,119 @@
+# AFEF v0.2.0 High Assurance work record.
+schema_version: "0.2.0"
+work_id: "GS-I3"
+related_specifications:
+  - "SPEC-0004"
+risk_profile: high_assurance
+scope:
+  in_scope:
+    - "Implement bounded anonymous public GitHub pull-request acquisition, strict raw JSON validation, complete pagination, two-pass consistency, canonical snapshots, deterministic delivery identity, existing GS-I2 durable intake, and a JSON CLI from accepted main 8120a414e7b807a86d99f1d1bd35cdd06d72bb68."
+    - "Validate offline with fake HTTP, CPython 3.12, frozen uv, local PostgreSQL 16 disposable databases, full branch coverage, the pinned AFEF validator, and persistent evidence."
+    - "Run one bounded unauthenticated GET-only public smoke for Harry5174/github-steward PR 1 and create one local candidate commit with the authorized subject."
+    - "Apply GS-I3-CR1 as exactly one child of 3c4442940f82dc8334b68e37dc22e39effc452bb to close anonymous-client-default inheritance, check-suite completeness, and collection-item shape findings."
+  out_of_scope:
+    - "Authorization headers, tokens, private repositories, issue comments, GitHub mutation methods, connector use, push, pull request, merge, tag, release, deployment, or production-readiness claims."
+    - "A new persistence path, asynchronous access, external queue, schema migration, response-body evidence archive, or any source commit beyond the one authorized candidate."
+authorization_envelope:
+  operations:
+    - operation_id: "OP-GS-I3-LOCAL-READS"
+      effect_class: local-read
+      decision: permitted
+      authorization_requirement: bounded_work_envelope
+      description: "Read the repository, pinned AFEF checkout, local dependency cache, tool output, and credential-redacted local configuration facts."
+    - operation_id: "OP-GS-I3-LOCAL-WRITES"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Modify the bounded GS-I3 paths and create one local candidate commit and persistent evidence package."
+    - operation_id: "OP-GS-I3-DISPOSABLE-DATABASES"
+      effect_class: local-destructive
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create and remove only designated exact-pattern local PostgreSQL disposable databases."
+    - operation_id: "OP-GS-I3-PUBLIC-READS"
+      effect_class: external-read
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Send unauthenticated GET requests only to public api.github.com resources for Harry5174/github-steward PR 1."
+    - operation_id: "OP-GS-I3-REMOTE-WRITES"
+      effect_class: external-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "Every GitHub write, remote Git mutation, publication, and deployment is prohibited."
+  authorization_references:
+    - authorization_id: "AUTH-GS-I3-PRODUCT-OWNER"
+      reference: "Product Owner GS-I3 bounded IDE Agent authorization for one local implementation pass, one candidate commit, disposable PostgreSQL, public unauthenticated GitHub GET requests, and persistent evidence."
+      operation_ids:
+        - "OP-GS-I3-LOCAL-WRITES"
+        - "OP-GS-I3-DISPOSABLE-DATABASES"
+        - "OP-GS-I3-PUBLIC-READS"
+  affected_paths:
+    - ".afef/project-manifest.yaml"
+    - ".afef/specifications/gs-i3-public-read-only-acquisition.md"
+    - ".afef/work-records/gs-i3.yaml"
+    - "pyproject.toml"
+    - "uv.lock"
+    - "src/github_steward/domain/acquisition.py"
+    - "src/github_steward/ports/github.py"
+    - "src/github_steward/application/public_acquisition.py"
+    - "src/github_steward/adapters/github/__init__.py"
+    - "src/github_steward/adapters/github/public_rest.py"
+    - "src/github_steward/cli.py"
+    - "tests/architecture/test_boundaries.py"
+    - "tests/unit/domain/test_acquisition.py"
+    - "tests/unit/adapters/test_public_github.py"
+    - "tests/unit/application/test_public_acquisition.py"
+    - "tests/unit/test_cli.py"
+    - "tests/integration/postgres/test_public_acquisition_postgres.py"
+  constraints:
+    - "Preserve accepted main 8120a414e7b807a86d99f1d1bd35cdd06d72bb68 and create exactly one descendant commit with subject feat: add public read-only GitHub acquisition."
+    - "Use only HTTPS api.github.com GET requests without Authorization, issue comments, private probes, GitHub CLI identity inspection, connector use, or any mutation capability."
+    - "Keep automated tests offline, use the existing project RFC 8785 and GS-I2 persistence boundaries, and add no migration unless representation is unsafe."
+    - "Create exactly one GS-I3-CR1 correction commit with subject fix: harden GS-I3 anonymous acquisition and produce separate GS-I3-CR1 evidence."
+  stop_conditions:
+    - "Stop on baseline, ancestry, scope, authentication, public-host, required validation, persistence, cleanup, or evidence failure."
+deliverables:
+  - "SPEC-0004, this work record, bounded runtime implementation, offline tests, public smoke result, one candidate commit, bundle, and verified evidence archive."
+  - "One direct-child GS-I3-CR1 correction commit and a separately verified GS-I3-CR1 bundle and evidence archive."
+implementation_state: implemented
+implementer:
+  actor_id: "local-ide-agent-gs-i3"
+  role: ide_agent
+validation_summaries:
+  - check: "Offline implementation validation"
+    result: passed
+    summary: "Formatting, lint, strict typing, architecture, unit, contract, PostgreSQL, migration, and coverage checks pass; all new GS-I3 modules have 100 percent branch coverage."
+  - check: "Public live smoke"
+    result: passed
+    summary: "Anonymous GET-only api.github.com acquisition of Harry5174/github-steward PR 1 completed, durably created exactly one inbox/work pair, and removed the designated GS-I3 disposable database."
+  - check: "GS-I3-CR1 correction closure"
+    result: passed
+    summary: "Adversarial anonymous-client defaults, exact-head check-suite boundaries 999/1000/1001, non-object and malformed collection entries, complete PostgreSQL and static validation, and 100 percent GS-I3 module branch coverage pass."
+  - check: "GS-I3-CR1 public live smoke"
+    result: passed
+    summary: "Seven exact public api.github.com GET requests used only allowlisted application headers with Authorization and Cookie absent, included 3 exact-head check suites, created one durable inbox/work pair, followed no redirect, and left zero correction databases."
+reviews:
+  - review_id: "GS-I3-IMPLEMENTATION-SUPERVISOR"
+    status: pending
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+independent_review:
+  status: pending
+  reviewer:
+    actor_id: "github-steward-independent-reviewer"
+    role: independent_reviewer
+final_gate:
+  status: not_issued
+  owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+human_checkpoint:
+  status: awaiting
+  owner:
+    actor_id: "github-steward-implementation-supervisor"
+    role: implementation_supervisor
+  next_required_action: "Inspect the exact local GS-I3 candidate commit, bundle, and persistent evidence; the IDE Agent may not publish or accept it."
+known_limitations:
+  - "Anonymous GitHub REST rate limits apply, upstream caps fail closed, and this bounded acquisition is not a production operations claim."
+next_action: "Return the candidate and persistent evidence for independent inspection."

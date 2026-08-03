@@ -41,6 +41,7 @@ def test_domain_imports_only_standard_library_and_itself() -> None:
         "sqlalchemy",
         "psycopg",
         "alembic",
+        "httpx",
         "rfc8785",
         "pytest",
         "hypothesis",
@@ -156,6 +157,7 @@ def test_dependency_categories_are_bounded() -> None:
     expected_runtime = {
         "SQLAlchemy>=2.0,<2.1",
         "alembic>=1.18,<1.19",
+        "httpx>=0.28,<0.29",
         "psycopg[binary]>=3.3,<3.4",
         "rfc8785>=0.1.4,<0.2",
     }
