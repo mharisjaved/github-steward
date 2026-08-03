@@ -10,9 +10,11 @@ scope:
     - "Validate offline with fake HTTP, CPython 3.12, frozen uv, local PostgreSQL 16 disposable databases, full branch coverage, the pinned AFEF validator, and persistent evidence."
     - "Run one bounded unauthenticated GET-only public smoke for Harry5174/github-steward PR 1 and create one local candidate commit with the authorized subject."
     - "Apply GS-I3-CR1 as exactly one child of 3c4442940f82dc8334b68e37dc22e39effc452bb to close anonymous-client-default inheritance, check-suite completeness, and collection-item shape findings."
+    - "Apply GS-I3-CR2 as one local direct descendant of merged main 6422bdaa46cd9d5aa1e108b01879102b358531b0 to remediate the post-merge reopened anonymous transport-boundary and canonical relationship-URL findings, preserve check-suite regression protection, and produce exact-candidate raw evidence."
   out_of_scope:
     - "Authorization headers, tokens, private repositories, issue comments, GitHub mutation methods, connector use, push, pull request, merge, tag, release, deployment, or production-readiness claims."
     - "A new persistence path, asynchronous access, external queue, schema migration, response-body evidence archive, or any source commit beyond the one authorized candidate."
+    - "GS-I1 or GS-I2 lifecycle reconciliation, CI implementation, the next feature sprint, self-review, formal finding closure, final GREEN, publication, or merge authority."
 authorization_envelope:
   operations:
     - operation_id: "OP-GS-I3-LOCAL-READS"
@@ -47,6 +49,12 @@ authorization_envelope:
         - "OP-GS-I3-LOCAL-WRITES"
         - "OP-GS-I3-DISPOSABLE-DATABASES"
         - "OP-GS-I3-PUBLIC-READS"
+    - authorization_id: "AUTH-GS-I3-CR2-PRODUCT-OWNER"
+      reference: "Product Owner GS-I3-CR2 post-merge acquisition boundary remediation authorization for one local pass from merge commit 6422bdaa46cd9d5aa1e108b01879102b358531b0, one correction commit, adversarial offline and PostgreSQL validation, one anonymous public smoke, and persistent raw evidence."
+      operation_ids:
+        - "OP-GS-I3-LOCAL-WRITES"
+        - "OP-GS-I3-DISPOSABLE-DATABASES"
+        - "OP-GS-I3-PUBLIC-READS"
   affected_paths:
     - ".afef/project-manifest.yaml"
     - ".afef/specifications/gs-i3-public-read-only-acquisition.md"
@@ -70,11 +78,14 @@ authorization_envelope:
     - "Use only HTTPS api.github.com GET requests without Authorization, issue comments, private probes, GitHub CLI identity inspection, connector use, or any mutation capability."
     - "Keep automated tests offline, use the existing project RFC 8785 and GS-I2 persistence boundaries, and add no migration unless representation is unsafe."
     - "Create exactly one GS-I3-CR1 correction commit with subject fix: harden GS-I3 anonymous acquisition and produce separate GS-I3-CR1 evidence."
+    - "Preserve the merged GS-I3 history and create exactly one CR2 direct-descendant commit on gs-i3-cr2-post-merge-acquisition-hardening with subject fix: close GS-I3 post-merge trust-boundary findings."
+    - "Construct the production HTTPX client and real transport only in project-owned infrastructure; retain only a narrow fake-transport seam under the same final-request policy wrapper and validate review relationship URLs as exact canonical semantic identity."
   stop_conditions:
     - "Stop on baseline, ancestry, scope, authentication, public-host, required validation, persistence, cleanup, or evidence failure."
 deliverables:
   - "SPEC-0004, this work record, bounded runtime implementation, offline tests, public smoke result, one candidate commit, bundle, and verified evidence archive."
   - "One direct-child GS-I3-CR1 correction commit and a separately verified GS-I3-CR1 bundle and evidence archive."
+  - "One direct-descendant GS-I3-CR2 correction commit plus credential-redacted raw validation, one public-smoke request audit, a verified bundle, and a safe exact-candidate evidence archive pending both required reviews."
 implementation_state: implemented
 implementer:
   actor_id: "local-ide-agent-gs-i3"
@@ -92,6 +103,15 @@ validation_summaries:
   - check: "GS-I3-CR1 public live smoke"
     result: passed
     summary: "Seven exact public api.github.com GET requests used only allowlisted application headers with Authorization and Cookie absent, included 3 exact-head check suites, created one durable inbox/work pair, followed no redirect, and left zero correction databases."
+  - check: "Post-merge independent assurance lifecycle"
+    result: failed
+    summary: "After PR 2 integrated GS-I3 and CR1 at merge commit 6422bdaa46cd9d5aa1e108b01879102b358531b0, later independent review superseded earlier assurance and reopened final assurance as AMBER: GS-I3-ANON-001 and GS-I3-SHAPE-001 reopened, GS-I3-CHECK-001 remained closed, and GS-I3-EVID-001 remained open."
+  - check: "GS-I3-CR2 local remediation"
+    result: passed
+    summary: "IMPLEMENTED_PENDING_INDEPENDENT_VERIFICATION: 328 offline tests pass with 99.78 percent global branch coverage and 100 percent for every GS-I3 module; PostgreSQL rejection paths, static checks, frozen lock, and one seven-request anonymous GET-only api.github.com smoke pass with one inbox/work pair and exact cleanup."
+  - check: "GS-I3-CR2 exact-candidate evidence review"
+    result: not_run
+    summary: "GS-I3-EVID-001 remains open while the IDE Agent creates the post-commit raw evidence, verified bundle, and safe archive; Implementation Supervisor and High Assurance Independent Review remain pending."
 reviews:
   - review_id: "GS-I3-IMPLEMENTATION-SUPERVISOR"
     status: pending
@@ -116,4 +136,5 @@ human_checkpoint:
   next_required_action: "Inspect the exact local GS-I3 candidate commit, bundle, and persistent evidence; the IDE Agent may not publish or accept it."
 known_limitations:
   - "Anonymous GitHub REST rate limits apply, upstream caps fail closed, and this bounded acquisition is not a production operations claim."
-next_action: "Return the candidate and persistent evidence for independent inspection."
+  - "GS-I3-ANON-001 and GS-I3-SHAPE-001 are implemented locally by CR2 but remain reopened pending independent verification; GS-I3-CHECK-001 remains closed with regression protection and GS-I3-EVID-001 remains open."
+next_action: "Create and return the exact local GS-I3-CR2 candidate and raw persistent evidence for Implementation Supervisor review followed by High Assurance Independent Review; push and merge remain unauthorized."

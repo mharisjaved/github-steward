@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-import httpx
 import pytest
 import sqlalchemy as sa
 
@@ -113,17 +112,21 @@ def test_run_composes_bounded_client_and_disposes_engine(
             self.disposed = True
 
     class Client:
+        entered = False
+        exited = False
+
         def __enter__(self) -> Client:
+            self.entered = True
             return self
 
         def __exit__(self, *args: object) -> None:
+            self.exited = True
             return None
 
     engine = Engine()
     client = Client()
     monkeypatch.setattr(sa, "create_engine", lambda *args, **kwargs: engine)
-    monkeypatch.setattr(httpx, "Client", lambda **kwargs: client)
-    monkeypatch.setattr(cli, "PublicGitHubRestClient", lambda value: value)
+    monkeypatch.setattr(cli, "PublicGitHubRestClient", lambda: client)
     monkeypatch.setattr(cli, "SyntheticReceiptService", lambda **kwargs: object())
 
     class Service:
@@ -136,4 +139,6 @@ def test_run_composes_bounded_client_and_disposes_engine(
 
     monkeypatch.setattr(cli, "PublicPullRequestAcquisitionService", Service)
     assert cli._run(RepositoryTarget("o", "r", 1)) == _result()
+    assert client.entered
+    assert client.exited
     assert engine.disposed

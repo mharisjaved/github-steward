@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable
-from urllib.parse import urlsplit
+from types import TracebackType
+from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 
@@ -20,6 +22,19 @@ from github_steward.ports.github import GitHubResponse, RequestAudit
 API_ORIGIN = "https://api.github.com"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 REQUEST_TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0)
+REQUEST_LIMITS = httpx.Limits(
+    max_connections=4,
+    max_keepalive_connections=2,
+    keepalive_expiry=5.0,
+)
+_APPROVED_HEADERS = {
+    "accept": "application/vnd.github+json",
+    "x-github-api-version": API_VERSION,
+    "user-agent": "github-steward",
+}
+_CREDENTIAL_HEADERS = {"authorization", "cookie", "proxy-authorization"}
+_NAME = re.compile(r"[A-Za-z0-9_.-]+\Z")
+_POSITIVE_DECIMAL = re.compile(r"[1-9][0-9]*\Z")
 
 
 def _reject_duplicate_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -77,10 +92,10 @@ def _next_link(value: str | None) -> str | None:
                 "malformed pagination Link header",
             )
         target = sections[0][1:-1]
-        if not _is_public_url(target):
+        if not _is_allowed_url(target):
             raise AcquisitionError(
                 AcquisitionOutcome.MALFORMED_RESPONSE,
-                "pagination link must be HTTPS api.github.com",
+                "pagination link did not match an allowed GitHub endpoint",
             )
         relations = {item for item in sections[1:] if item.startswith("rel=")}
         if 'rel="next"' in relations:
@@ -93,38 +108,189 @@ def _next_link(value: str | None) -> str | None:
     return matches[0] if matches else None
 
 
-def _is_public_url(url: str) -> bool:
+def _name(value: str) -> bool:
+    return _NAME.fullmatch(value) is not None
+
+
+def _positive_decimal(value: str) -> bool:
+    return _POSITIVE_DECIMAL.fullmatch(value) is not None
+
+
+def _query_pairs(query: str) -> tuple[tuple[str, str], ...] | None:
+    if "%" in query or ";" in query:
+        return None
+    try:
+        pairs = tuple(parse_qsl(query, keep_blank_values=True, strict_parsing=True))
+    except ValueError:
+        return None
+    if len({key for key, _ in pairs}) != len(pairs):
+        return None
+    return pairs
+
+
+def _allowed_endpoint(path: str, query: str) -> bool:
+    if "%" in path or "\\" in path or "//" in path:
+        return False
+    parts = path.split("/")
+    if len(parts) < 6 or parts[0] != "" or parts[1] != "repos":
+        return False
+    owner, repository = parts[2], parts[3]
+    if (
+        not _name(owner)
+        or not _name(repository)
+        or owner in {".", ".."}
+        or repository
+        in {
+            ".",
+            "..",
+        }
+    ):
+        return False
+    pairs = _query_pairs(query)
+    if pairs is None:
+        return False
+    parameters = dict(pairs)
+    if parts[4] == "pulls" and _positive_decimal(parts[5]):
+        if len(parts) == 6:
+            return not parameters
+        if len(parts) == 7 and parts[6] in {"files", "commits", "reviews"}:
+            return parameters.get("per_page") == "100" and (
+                set(parameters) == {"per_page"}
+                or (
+                    set(parameters) == {"per_page", "page"}
+                    and _positive_decimal(parameters["page"])
+                )
+            )
+        return False
+    if (
+        parts[4] == "commits"
+        and len(parts) == 7
+        and len(parts[5]) == 40
+        and all(character in "0123456789abcdef" for character in parts[5])
+    ):
+        if parts[6] == "check-suites":
+            return not parameters
+        if parts[6] == "check-runs":
+            required = {"filter": "latest", "per_page": "100"}
+            return all(
+                parameters.get(key) == value for key, value in required.items()
+            ) and (
+                set(parameters) == set(required)
+                or (
+                    set(parameters) == {*required, "page"}
+                    and _positive_decimal(parameters["page"])
+                )
+            )
+    return False
+
+
+def _is_allowed_url(url: str) -> bool:
     try:
         parsed = urlsplit(url)
-        return (
-            parsed.scheme == "https"
-            and parsed.hostname == "api.github.com"
-            and parsed.port in (None, 443)
-            and parsed.username is None
-            and parsed.password is None
-            and parsed.path.startswith("/")
-            and not parsed.fragment
-        )
+        port = parsed.port
     except ValueError:
         return False
+    checks = (
+        parsed.scheme == "https",
+        parsed.netloc in {"api.github.com", "api.github.com:443"},
+        parsed.hostname == "api.github.com",
+        port in (None, 443),
+        parsed.username is None,
+        parsed.password is None,
+        not parsed.fragment,
+        _allowed_endpoint(parsed.path, parsed.query),
+    )
+    return all(checks)
+
+
+def _reject_policy(message: str) -> None:
+    raise AcquisitionError(AcquisitionOutcome.MALFORMED_RESPONSE, message)
+
+
+def _validate_final_request(request: httpx.Request) -> None:
+    """Fail closed over the request immediately before transport delegation."""
+
+    if request.method != "GET":
+        _reject_policy("transport policy permits only GET")
+    url = request.url
+    if url.scheme != "https" or url.host != "api.github.com":
+        _reject_policy("transport policy permits only HTTPS api.github.com")
+    if url.userinfo or url.port not in (None, 443) or url.fragment:
+        _reject_policy("transport policy rejected request authority")
+    query = url.query.decode("ascii", errors="strict")
+    if not _allowed_endpoint(url.path, query):
+        _reject_policy("transport policy rejected endpoint or query")
+    if request.read() != b"":
+        _reject_policy("transport policy rejected a request body")
+    headers = {name.lower(): value for name, value in request.headers.items()}
+    if any(name in headers for name in _CREDENTIAL_HEADERS):
+        _reject_policy("transport policy rejected credential-bearing headers")
+    expected = {"host": "api.github.com", **_APPROVED_HEADERS}
+    if headers != expected:
+        _reject_policy("transport policy rejected unexpected request headers")
+
+
+class PolicyEnforcingTransport(httpx.BaseTransport):
+    """Validate the final request before a real or fake transport can receive it."""
+
+    def __init__(self, transport: httpx.BaseTransport) -> None:
+        self._transport = transport
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        _validate_final_request(request)
+        return self._transport.handle_request(request)
+
+    def close(self) -> None:
+        self._transport.close()
 
 
 class PublicGitHubRestClient:
-    """Strict synchronous client with a deliberately GET-only public surface."""
+    """Project-owned synchronous client with a GET-only public surface."""
 
     def __init__(
         self,
-        client: httpx.Client,
         *,
+        transport: httpx.BaseTransport | None = None,
         maximum_attempts: int = 3,
         maximum_response_bytes: int = MAX_RESPONSE_BYTES,
     ) -> None:
         if maximum_attempts < 1 or maximum_response_bytes < 1:
             raise ValueError("adapter bounds must be positive")
-        self._client = client
+        underlying = transport or httpx.HTTPTransport(
+            trust_env=False,
+            proxy=None,
+            limits=REQUEST_LIMITS,
+            retries=0,
+        )
+        self._client = httpx.Client(
+            transport=PolicyEnforcingTransport(underlying),
+            trust_env=False,
+            follow_redirects=False,
+            auth=None,
+            cookies=None,
+            params=None,
+            event_hooks={},
+            proxy=None,
+            timeout=REQUEST_TIMEOUT,
+            limits=REQUEST_LIMITS,
+        )
         self._maximum_attempts = maximum_attempts
         self._maximum_response_bytes = maximum_response_bytes
         self._audit: list[RequestAudit] = []
+
+    def __enter__(self) -> PublicGitHubRestClient:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._client.close()
 
     @property
     def audit(self) -> tuple[RequestAudit, ...]:
@@ -145,7 +311,7 @@ class PublicGitHubRestClient:
                 try:
                     raw = self._bounded_body(response.iter_bytes())
                     classification = self._classification(response)
-                    self._record(url, classification)
+                    self._record(url, classification, raw)
                     if (
                         response.status_code >= 500
                         and attempt + 1 < self._maximum_attempts
@@ -167,11 +333,11 @@ class PublicGitHubRestClient:
                     response.close()
             except httpx.TimeoutException as exc:
                 last_timeout = exc
-                self._record(url, AcquisitionOutcome.TIMEOUT.value)
+                self._record(url, AcquisitionOutcome.TIMEOUT.value, None)
                 if attempt + 1 == self._maximum_attempts:
                     break
             except httpx.TransportError as exc:
-                self._record(url, AcquisitionOutcome.TRANSPORT_ERROR.value)
+                self._record(url, AcquisitionOutcome.TRANSPORT_ERROR.value, None)
                 if attempt + 1 == self._maximum_attempts:
                     raise AcquisitionError(
                         AcquisitionOutcome.TRANSPORT_ERROR,
@@ -197,10 +363,10 @@ class PublicGitHubRestClient:
 
     def _validated_url(self, path_or_url: str) -> str:
         url = API_ORIGIN + path_or_url if path_or_url.startswith("/") else path_or_url
-        if not _is_public_url(url):
+        if not _is_allowed_url(url):
             raise AcquisitionError(
                 AcquisitionOutcome.MALFORMED_RESPONSE,
-                "request target must be HTTPS api.github.com",
+                "request target did not match an allowed GitHub endpoint",
             )
         return url
 
@@ -215,10 +381,33 @@ class PublicGitHubRestClient:
                 )
         return bytes(body)
 
-    def _record(self, url: str, classification: str) -> None:
+    def _record(
+        self, url: str, classification: str, raw_response: bytes | None
+    ) -> None:
         parsed = urlsplit(url)
-        path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
-        self._audit.append(RequestAudit("GET", "api.github.com", path, classification))
+        pairs = _query_pairs(parsed.query)
+        if pairs is None:  # pragma: no cover - URL policy already established
+            raise AssertionError("validated query became invalid")
+        self._audit.append(
+            RequestAudit(
+                method="GET",
+                host="api.github.com",
+                path=parsed.path,
+                classification=classification,
+                scheme="https",
+                port_classification=(
+                    "explicit_https" if parsed.port == 443 else "default_https"
+                ),
+                query=pairs,
+                application_headers=tuple(sorted(_APPROVED_HEADERS)),
+                credentials_absent=True,
+                raw_response_sha256=(
+                    hashlib.sha256(raw_response).hexdigest()
+                    if raw_response is not None
+                    else None
+                ),
+            )
+        )
 
     @staticmethod
     def _classification(response: httpx.Response) -> str:

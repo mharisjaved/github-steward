@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import NoReturn, cast
+from urllib.parse import urlsplit
 
 from github_steward.domain.acquisition import (
     API_VERSION,
@@ -357,13 +358,16 @@ def _validate_collection_relationships(
         _integer(file, "changes", minimum=0)
     for item in commits:
         require_sha(_mapping(item, "commit item").get("sha"), "commit.sha")
-    suffix = f"/repos/{target.owner}/{target.repository}/pulls/{target.pull_number}"
+    expected_url = (
+        "https://api.github.com/repos/"
+        f"{target.owner}/{target.repository}/pulls/{target.pull_number}"
+    )
     for item in reviews:
         review = _mapping(item, "review item")
         _integer(review, "id", minimum=1)
         _string(review, "state")
         url = review.get("pull_request_url")
-        if url is not None and (not isinstance(url, str) or not url.endswith(suffix)):
+        if not _canonical_relationship_url(url, expected_url):
             _malformed("review pull_request_url did not match requested pull request")
         commit_id = review.get("commit_id")
         if commit_id is not None:
@@ -375,6 +379,33 @@ def _validate_collection_relationships(
         _string(check, "status")
         if require_sha(check.get("head_sha"), "check_run.head_sha") != head_sha:
             _malformed("check run did not belong to the acquired head SHA")
+
+
+def _canonical_relationship_url(value: object, expected: str) -> bool:
+    if not isinstance(value, str) or "%" in value:
+        return False
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return False
+    expected_parts = urlsplit(expected)
+    checks = (
+        parsed.scheme == "https",
+        parsed.netloc == "api.github.com",
+        parsed.hostname == "api.github.com",
+        parsed.username is None,
+        parsed.password is None,
+        port is None,
+        parsed.path == expected_parts.path,
+        "/./" not in parsed.path,
+        "/../" not in parsed.path,
+        parsed.query == "",
+        parsed.fragment == "",
+        parsed == expected_parts,
+        value == expected,
+    )
+    return all(checks)
 
 
 def _observation_time(value: str) -> tuple[str, int]:

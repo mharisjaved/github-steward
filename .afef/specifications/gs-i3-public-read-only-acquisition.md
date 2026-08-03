@@ -30,9 +30,9 @@ affected_paths:
   - "tests/integration/postgres/test_public_acquisition_postgres.py"
 acceptance_criteria:
   - id: "AC-0001"
-    description: "A project-owned synchronous port and adapter construct each request independently of injected client defaults, permit only anonymous HTTPS GET requests to api.github.com, send only allowlisted application headers with explicit timeouts, disable authentication and redirects, follow only validated Link next relations, and expose no GitHub mutation operation."
+    description: "Project-owned infrastructure constructs the synchronous HTTPX client and real transport with environment trust, authentication, cookies, default parameters, hooks, proxies, and redirects disabled; a policy-enforcing wrapper validates every final real or fake transport request as an allowlisted anonymous HTTPS GET to api.github.com."
   - id: "AC-0002"
-    description: "Authoritative raw bytes are size-bounded, SHA-256 hashed, strictly decoded as UTF-8 JSON with nested duplicate-key and unsupported-number rejection, and every required collection-item shape, stable field type, and source relationship fails closed."
+    description: "Authoritative raw bytes are size-bounded, SHA-256 hashed, strictly decoded as UTF-8 JSON with nested duplicate-key and unsupported-number rejection, and every required collection-item shape, stable field type, and absolute semantic relationship URL is validated for exact canonical GitHub origin and identity before durable intake."
   - id: "AC-0003"
     description: "Pull details, files, commits, reviews, exact-head check-suite count, and latest exact-head checks are acquired with complete pagination, explicit 1,000-suite and other upstream caps, count checks, and a bounded two-pass consistency retry."
   - id: "AC-0004"
@@ -42,7 +42,9 @@ acceptance_criteria:
   - id: "AC-0006"
     description: "The local command emits concise JSON, automated tests remain offline, all new GS-I3 modules have 100 percent branch coverage, global branch coverage does not regress, and the public live smoke is bounded to PR 1."
   - id: "AC-0007"
-    description: "The implementation commit descends from accepted main and GS-I3-CR1 is exactly one child of 3c4442940f82dc8334b68e37dc22e39effc452bb, with no push, pull request, merge, tag, release, deployment, authenticated GitHub access, or private probe."
+    description: "The original GS-I3 and its direct-child CR1 were integrated by PR 2 at merge commit 6422bdaa46cd9d5aa1e108b01879102b358531b0; CR2 is exactly one local direct descendant of that merge with no history rewrite, push, pull request, merge, tag, release, deployment, authenticated GitHub access, or private probe."
+  - id: "AC-0008"
+    description: "CR2 preserves credential-redacted raw command output, machine-readable branch coverage, PostgreSQL and migration validation, exact Git identities, one public-smoke request audit, cleanup proof, a verified candidate bundle, and a safe verified evidence archive outside the repository."
 related_decisions:
   - "GS-I3-ANONYMOUS-GET-ONLY"
   - "GS-I3-TWO-PASS-CONSISTENCY"
@@ -81,14 +83,52 @@ evidence, not production readiness or authorization for GitHub writes.
 
 ## GS-I3-CR1 boundary hardening
 
-GS-I3-CR1 closes `GS-I3-ANON-001` by constructing each `httpx.Request`
+At the CR1 candidate stage, GS-I3-CR1 reported `GS-I3-ANON-001` closed by
+constructing each `httpx.Request`
 directly and invoking the injected client with authentication and redirects
-explicitly disabled. Client-level authorization, authentication, cookies,
-query parameters, and redirect policy therefore cannot enter the request.
+explicitly disabled. CR1 asserted that client-level authorization,
+authentication, cookies, query parameters, and redirect policy therefore could
+not enter the request; the later post-merge review found that request hooks and
+other inherited client behavior still operated after that validation.
 
-It closes `GS-I3-CHECK-001` by reading the exact-head check-suite summary
+CR1 reported `GS-I3-CHECK-001` closed by reading the exact-head check-suite summary
 before check runs, validating its object shape and total, failing above 1,000,
-and recording its raw digest and suite count in the snapshot. It closes
-`GS-I3-SHAPE-001` by validating every collection entry as an object and
+and recording its raw digest and suite count in the snapshot. CR1 also reported
+`GS-I3-SHAPE-001` closed at that candidate stage by validating every collection
+entry as an object and
 enforcing the stable required file, commit, review, and check-run fields and
 relationships for API version `2026-03-10`.
+
+## GS-I3-CR2 post-merge acquisition boundary remediation
+
+GS-I3 and CR1 were integrated through PR 2 at merge commit
+`6422bdaa46cd9d5aa1e108b01879102b358531b0`. A later post-merge independent
+review superseded the earlier final-assurance disposition and reopened it as
+AMBER. `GS-I3-ANON-001` and `GS-I3-SHAPE-001` are reopened;
+`GS-I3-CHECK-001` remains closed with exact-head, 999/1,000/1,001, latest-filter,
+snapshot-provenance, and no-persistence regression protection; and
+`GS-I3-EVID-001` remains open pending review of the exact-candidate raw evidence.
+
+CR2 removes the arbitrary `httpx.Client` seam. Project-owned infrastructure
+constructs both the client and default transport with `trust_env=False`,
+`follow_redirects=False`, `auth=None`, no cookies, no default query parameters,
+no external hooks, no proxy configuration, explicit connect/read/write/pool
+timeouts, bounded connection limits, and the existing bounded application retry
+policy. Tests may supply only a synchronous transport. A project-owned wrapper
+remains outside both real and fake transports and validates the final request
+immediately before delegation: method, scheme, host, user information, port,
+fragment, endpoint path, exact endpoint query, empty body, credential-bearing
+headers, and application-controlled headers all fail closed. A redirect is
+classified without a second request.
+
+Every review `pull_request_url` is now required to equal the complete canonical
+relationship
+`https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}`. Scheme,
+authority, host, user information, port, exact path, dot or percent-encoded
+bypass, query, fragment, and expected owner/repository/pull identity are checked
+before the accepted GS-I2 durable intake.
+
+The IDE Agent status for the CR2 implementations of `GS-I3-ANON-001` and
+`GS-I3-SHAPE-001` is `IMPLEMENTED_PENDING_INDEPENDENT_VERIFICATION`, not formally
+closed. CR2 remains pending Implementation Supervisor and High Assurance
+Independent Review. Push and merge remain unauthorized.
