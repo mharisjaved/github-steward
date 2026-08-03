@@ -30,11 +30,11 @@ affected_paths:
   - "tests/integration/postgres/test_public_acquisition_postgres.py"
 acceptance_criteria:
   - id: "AC-0001"
-    description: "A project-owned synchronous port and adapter permit only anonymous HTTPS GET requests to api.github.com, use the accepted REST headers and explicit bounds, follow only validated Link next relations, and expose no GitHub mutation operation."
+    description: "A project-owned synchronous port and adapter construct each request independently of injected client defaults, permit only anonymous HTTPS GET requests to api.github.com, send only allowlisted application headers with explicit timeouts, disable authentication and redirects, follow only validated Link next relations, and expose no GitHub mutation operation."
   - id: "AC-0002"
-    description: "Authoritative raw bytes are size-bounded, SHA-256 hashed, strictly decoded as UTF-8 JSON with nested duplicate-key and unsupported-number rejection, and required response shapes and source relationships fail closed."
+    description: "Authoritative raw bytes are size-bounded, SHA-256 hashed, strictly decoded as UTF-8 JSON with nested duplicate-key and unsupported-number rejection, and every required collection-item shape, stable field type, and source relationship fails closed."
   - id: "AC-0003"
-    description: "Pull details, files, commits, reviews, and latest checks for the exact head SHA are completely paginated with explicit upstream caps, count checks, and a bounded two-pass consistency retry."
+    description: "Pull details, files, commits, reviews, exact-head check-suite count, and latest exact-head checks are acquired with complete pagination, explicit 1,000-suite and other upstream caps, count checks, and a bounded two-pass consistency retry."
   - id: "AC-0004"
     description: "A stable versioned snapshot records source identity, head and base SHAs, API version, completeness, raw-response digests, and a project canonical digest without retrieval timestamps or transport headers affecting identity."
   - id: "AC-0005"
@@ -42,7 +42,7 @@ acceptance_criteria:
   - id: "AC-0006"
     description: "The local command emits concise JSON, automated tests remain offline, all new GS-I3 modules have 100 percent branch coverage, global branch coverage does not regress, and the public live smoke is bounded to PR 1."
   - id: "AC-0007"
-    description: "The implementation is one local descendant commit of accepted main 8120a414e7b807a86d99f1d1bd35cdd06d72bb68 with no push, pull request, merge, tag, release, deployment, authenticated GitHub access, or private probe."
+    description: "The implementation commit descends from accepted main and GS-I3-CR1 is exactly one child of 3c4442940f82dc8334b68e37dc22e39effc452bb, with no push, pull request, merge, tag, release, deployment, authenticated GitHub access, or private probe."
 related_decisions:
   - "GS-I3-ANONYMOUS-GET-ONLY"
   - "GS-I3-TWO-PASS-CONSISTENCY"
@@ -78,3 +78,17 @@ delivery identity. Successful results use the existing GS-I2 decoded-mapping
 receipt and its application-owned PostgreSQL transaction, so no migration or
 parallel persistence path is introduced. This is bounded implementation
 evidence, not production readiness or authorization for GitHub writes.
+
+## GS-I3-CR1 boundary hardening
+
+GS-I3-CR1 closes `GS-I3-ANON-001` by constructing each `httpx.Request`
+directly and invoking the injected client with authentication and redirects
+explicitly disabled. Client-level authorization, authentication, cookies,
+query parameters, and redirect policy therefore cannot enter the request.
+
+It closes `GS-I3-CHECK-001` by reading the exact-head check-suite summary
+before check runs, validating its object shape and total, failing above 1,000,
+and recording its raw digest and suite count in the snapshot. It closes
+`GS-I3-SHAPE-001` by validating every collection entry as an object and
+enforcing the stable required file, commit, review, and check-run fields and
+relationships for API version `2026-03-10`.

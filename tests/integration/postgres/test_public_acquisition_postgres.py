@@ -66,14 +66,37 @@ class StableGitHub:
                 self.primary,
             ),
             f"{self.primary}/files?per_page=100": _response(
-                [{"sha": "c" * 40, "filename": "x.py"}], "files"
+                [
+                    {
+                        "sha": "c" * 40,
+                        "filename": "x.py",
+                        "status": "modified",
+                        "additions": 2,
+                        "deletions": 1,
+                        "changes": 3,
+                    }
+                ],
+                "files",
             ),
             f"{self.primary}/commits?per_page=100": _response(
                 [{"sha": HEAD}], "commits"
             ),
             f"{self.primary}/reviews?per_page=100": _response([], "reviews"),
+            f"{root}/commits/{HEAD}/check-suites": _response(
+                {"total_count": 0, "check_suites": []}, "suites"
+            ),
             f"{root}/commits/{HEAD}/check-runs?filter=latest&per_page=100": _response(
-                {"total_count": 1, "check_runs": [{"id": 1, "head_sha": HEAD}]},
+                {
+                    "total_count": 1,
+                    "check_runs": [
+                        {
+                            "id": 1,
+                            "name": "test",
+                            "status": "completed",
+                            "head_sha": HEAD,
+                        }
+                    ],
+                },
                 "checks",
             ),
         }

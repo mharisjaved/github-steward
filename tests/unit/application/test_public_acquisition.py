@@ -116,6 +116,7 @@ def _paths(head: str = HEAD_A) -> dict[str, str]:
         "files": f"{primary}/files?per_page=100",
         "commits": f"{primary}/commits?per_page=100",
         "reviews": f"{primary}/reviews?per_page=100",
+        "suites": f"{root}/commits/{head}/check-suites",
         "checks": f"{root}/commits/{head}/check-runs?filter=latest&per_page=100",
     }
 
@@ -128,6 +129,7 @@ def _responses(
     commits: list[object] | None = None,
     reviews: list[object] | None = None,
     checks: list[object] | None = None,
+    check_suite_total: int = 0,
     check_total: int | None = None,
 ) -> dict[str, list[GitHubResponse]]:
     first = first or _primary()
@@ -135,7 +137,20 @@ def _responses(
     head = cast(dict[str, object], first["head"])["sha"]
     assert isinstance(head, str)
     paths = _paths(head)
-    files = files if files is not None else [{"sha": "e" * 40, "filename": "x.py"}]
+    files = (
+        files
+        if files is not None
+        else [
+            {
+                "sha": "e" * 40,
+                "filename": "x.py",
+                "status": "modified",
+                "additions": 2,
+                "deletions": 1,
+                "changes": 3,
+            }
+        ]
+    )
     commits = commits if commits is not None else [{"sha": HEAD_A}]
     reviews = (
         reviews
@@ -143,12 +158,18 @@ def _responses(
         else [
             {
                 "id": 9,
+                "state": "APPROVED",
+                "commit_id": head,
                 "pull_request_url": "https://api.github.com/repos/"
                 "Harry5174/github-steward/pulls/1",
             }
         ]
     )
-    checks = checks if checks is not None else [{"id": 12, "head_sha": head}]
+    checks = (
+        checks
+        if checks is not None
+        else [{"id": 12, "name": "test", "status": "completed", "head_sha": head}]
+    )
     return {
         paths["primary"]: [
             _response(first, paths["primary"]),
@@ -157,6 +178,12 @@ def _responses(
         paths["files"]: [_response(files, paths["files"])],
         paths["commits"]: [_response(commits, paths["commits"])],
         paths["reviews"]: [_response(reviews, paths["reviews"])],
+        paths["suites"]: [
+            _response(
+                {"total_count": check_suite_total, "check_suites": []},
+                paths["suites"],
+            )
+        ],
         paths["checks"]: [
             _response(
                 {
@@ -189,6 +216,7 @@ def test_stable_acquisition_exact_paths_and_durable_mapping() -> None:
         expected["files"],
         expected["commits"],
         expected["reviews"],
+        expected["suites"],
         expected["checks"],
         expected["primary"],
     ]
@@ -197,14 +225,21 @@ def test_stable_acquisition_exact_paths_and_durable_mapping() -> None:
         "files": 1,
         "commits": 1,
         "reviews": 1,
+        "check_suites": 0,
         "check_runs": 1,
-        "responses": 6,
+        "responses": 7,
     }
     identity, mapping = receipt.calls[0]
     assert identity == result.delivery_identity
     assert mapping["entity_id"] == "77:1"
     assert mapping["observed_at"] == "2026-08-03T01:02:03.000000Z"
     assert mapping["sequence"] == 1785718923
+    observation = cast(dict[str, object], mapping["observation"])
+    snapshot = cast(dict[str, object], observation["snapshot"])
+    raw_responses = cast(list[dict[str, str]], snapshot["raw_responses"])
+    assert [item["kind"] for item in raw_responses].count("check_suites") == 1
+    completeness = cast(dict[str, object], snapshot["completeness"])
+    assert cast(dict[str, int], completeness["counts"])["check_suites"] == 0
     assert result.as_mapping()["completeness"] == "COMPLETE"
 
 
@@ -214,13 +249,34 @@ def test_pagination_follows_only_next_link() -> None:
     responses = _responses(first=_primary(changed_files=2), files=[])
     responses[paths["files"]] = [
         _response(
-            [{"sha": "e" * 40, "filename": "one"}],
+            [
+                {
+                    "sha": "e" * 40,
+                    "filename": "one",
+                    "status": "added",
+                    "additions": 1,
+                    "deletions": 0,
+                    "changes": 1,
+                }
+            ],
             paths["files"],
             next_url=next_url,
         )
     ]
     responses[next_url] = [
-        _response([{"sha": "f" * 40, "filename": "two"}], "/page/two")
+        _response(
+            [
+                {
+                    "sha": "f" * 40,
+                    "filename": "two",
+                    "status": "added",
+                    "additions": 1,
+                    "deletions": 0,
+                    "changes": 1,
+                }
+            ],
+            "/page/two",
+        )
     ]
     github = FakeGitHub(responses)
     result = _service(github, FakeReceipt()).acquire(TARGET)
@@ -298,6 +354,51 @@ def test_check_run_limit_rejection() -> None:
 
 
 @pytest.mark.parametrize(
+    ("suite_total", "outcome"),
+    [
+        (999, AcquisitionOutcome.ACQUIRED),
+        (1000, AcquisitionOutcome.ACQUIRED),
+        (1001, AcquisitionOutcome.UNSUPPORTED_UPSTREAM_LIMIT),
+    ],
+)
+def test_check_suite_boundary(suite_total: int, outcome: AcquisitionOutcome) -> None:
+    receipt = FakeReceipt()
+    service = _service(
+        FakeGitHub(_responses(check_suite_total=suite_total)),
+        receipt,
+    )
+    if outcome is AcquisitionOutcome.ACQUIRED:
+        result = service.acquire(TARGET)
+        assert result.pagination["check_suites"] == suite_total
+        assert len(receipt.calls) == 1
+    else:
+        with pytest.raises(AcquisitionError) as raised:
+            service.acquire(TARGET)
+        assert raised.value.outcome is outcome
+        assert receipt.calls == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        {"total_count": "1", "check_suites": []},
+        {"total_count": 1},
+        {"total_count": 1, "check_suites": {}},
+    ],
+)
+def test_check_suite_shape_rejection_persists_nothing(body: object) -> None:
+    paths = _paths()
+    responses = _responses()
+    responses[paths["suites"]] = [_response(body, paths["suites"])]
+    receipt = FakeReceipt()
+    with pytest.raises(AcquisitionError) as raised:
+        _service(FakeGitHub(responses), receipt).acquire(TARGET)
+    assert raised.value.outcome is AcquisitionOutcome.MALFORMED_RESPONSE
+    assert receipt.calls == []
+
+
+@pytest.mark.parametrize(
     "responses",
     [
         _responses(files=[]),
@@ -350,9 +451,18 @@ def test_primary_shape_and_identity_validation(
         ("commits", [{"sha": "bad"}]),
         (
             "reviews",
-            [{"id": 1, "pull_request_url": "https://api.github.com/wrong"}],
+            [
+                {
+                    "id": 1,
+                    "state": "APPROVED",
+                    "pull_request_url": "https://api.github.com/wrong",
+                }
+            ],
         ),
-        ("checks", [{"id": 1, "head_sha": HEAD_B}]),
+        (
+            "checks",
+            [{"id": 1, "name": "test", "status": "completed", "head_sha": HEAD_B}],
+        ),
         ("reviews", [{"id": "bad"}]),
     ],
 )
@@ -367,6 +477,73 @@ def test_collection_relationship_validation(
             responses = _responses(reviews=items)
         else:
             responses = _responses(checks=items)
+        _service(FakeGitHub(responses), receipt).acquire(TARGET)
+    assert raised.value.outcome is AcquisitionOutcome.MALFORMED_RESPONSE
+    assert receipt.calls == []
+
+
+@pytest.mark.parametrize("collection", ["files", "commits", "reviews", "checks"])
+def test_non_object_collection_entries_persist_nothing(collection: str) -> None:
+    receipt = FakeReceipt()
+    if collection == "files":
+        responses = _responses(files=[None])
+    elif collection == "commits":
+        responses = _responses(commits=[None])
+    elif collection == "reviews":
+        responses = _responses(reviews=[None])
+    else:
+        responses = _responses(checks=[None])
+    with pytest.raises(AcquisitionError) as raised:
+        _service(FakeGitHub(responses), receipt).acquire(TARGET)
+    assert raised.value.outcome is AcquisitionOutcome.MALFORMED_RESPONSE
+    assert receipt.calls == []
+
+
+def test_multiple_reviews_and_null_commit_relationship_are_valid() -> None:
+    reviews: list[object] = [
+        {"id": 1, "state": "COMMENTED", "commit_id": None},
+        {"id": 2, "state": "APPROVED", "commit_id": HEAD_A},
+    ]
+    result = _service(FakeGitHub(_responses(reviews=reviews)), FakeReceipt()).acquire(
+        TARGET
+    )
+    assert result.pagination["reviews"] == 2
+
+
+@pytest.mark.parametrize(
+    ("collection", "items"),
+    [
+        ("files", [{"sha": "e" * 40, "filename": "x.py"}]),
+        (
+            "files",
+            [
+                {
+                    "sha": "e" * 40,
+                    "filename": "x.py",
+                    "status": "modified",
+                    "additions": "2",
+                    "deletions": 1,
+                    "changes": 3,
+                }
+            ],
+        ),
+        ("reviews", [{"id": 1, "state": 2}]),
+        ("reviews", [{"id": 1, "state": "APPROVED", "commit_id": "bad"}]),
+        ("checks", [{"id": 1, "name": "", "status": "completed", "head_sha": HEAD_A}]),
+        ("checks", [{"id": 1, "name": "test", "head_sha": HEAD_A}]),
+    ],
+)
+def test_required_collection_item_fields_and_types(
+    collection: str, items: list[object]
+) -> None:
+    receipt = FakeReceipt()
+    if collection == "files":
+        responses = _responses(files=items)
+    elif collection == "reviews":
+        responses = _responses(reviews=items)
+    else:
+        responses = _responses(checks=items)
+    with pytest.raises(AcquisitionError) as raised:
         _service(FakeGitHub(responses), receipt).acquire(TARGET)
     assert raised.value.outcome is AcquisitionOutcome.MALFORMED_RESPONSE
     assert receipt.calls == []

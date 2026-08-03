@@ -10,6 +10,7 @@ from typing import NoReturn, cast
 from github_steward.domain.acquisition import (
     API_VERSION,
     MAX_CHECK_RUNS,
+    MAX_CHECK_SUITES,
     MAX_COMMITS,
     MAX_FILES,
     MAX_PAGES,
@@ -170,6 +171,9 @@ class PublicPullRequestAcquisitionService:
         reviews, review_pages = self._list_pages(
             f"{primary_path}/reviews?per_page=100", "reviews", None
         )
+        check_suite_total, check_suite_response = self._check_suite_count(
+            f"{base}/commits/{first.head_sha}/check-suites"
+        )
         checks, check_pages, check_total = self._check_pages(
             f"{base}/commits/{first.head_sha}/check-runs?filter=latest&per_page=100"
         )
@@ -180,6 +184,7 @@ class PublicPullRequestAcquisitionService:
         if len(checks) != check_total:
             _incomplete("check-run total_count did not match pagination")
         _validate_collection_relationships(
+            files=files,
             commits=commits,
             reviews=reviews,
             checks=checks,
@@ -194,6 +199,7 @@ class PublicPullRequestAcquisitionService:
             *file_pages,
             *commit_pages,
             *review_pages,
+            check_suite_response,
             *check_pages,
             _provenance("pull_request:second", second_response),
         ]
@@ -201,6 +207,7 @@ class PublicPullRequestAcquisitionService:
             "files": len(files),
             "commits": len(commits),
             "reviews": len(reviews),
+            "check_suites": check_suite_total,
             "check_runs": len(checks),
             "responses": len(responses),
         }
@@ -257,6 +264,15 @@ class PublicPullRequestAcquisitionService:
                 _unsupported(name, maximum)
             current = response.next_url
         return items, provenance
+
+    def _check_suite_count(self, path: str) -> tuple[int, Mapping[str, str]]:
+        response = self._github.get(path)
+        body = _mapping(response.value, "check-suite response")
+        total = _integer(body, "total_count", minimum=0)
+        _list(body.get("check_suites"), "check_suites")
+        if total > MAX_CHECK_SUITES:
+            _unsupported("check_suites", MAX_CHECK_SUITES)
+        return total, _provenance("check_suites", response)
 
     def _check_pages(
         self, path: str
@@ -324,24 +340,39 @@ def _anchor(value: object, target: RepositoryTarget) -> _Anchor:
 
 def _validate_collection_relationships(
     *,
+    files: list[object],
     commits: list[object],
     reviews: list[object],
     checks: list[object],
     target: RepositoryTarget,
     head_sha: str,
 ) -> None:
+    for item in files:
+        file = _mapping(item, "file item")
+        require_sha(file.get("sha"), "file.sha")
+        _string(file, "filename")
+        _string(file, "status")
+        _integer(file, "additions", minimum=0)
+        _integer(file, "deletions", minimum=0)
+        _integer(file, "changes", minimum=0)
     for item in commits:
         require_sha(_mapping(item, "commit item").get("sha"), "commit.sha")
     suffix = f"/repos/{target.owner}/{target.repository}/pulls/{target.pull_number}"
     for item in reviews:
         review = _mapping(item, "review item")
         _integer(review, "id", minimum=1)
+        _string(review, "state")
         url = review.get("pull_request_url")
         if url is not None and (not isinstance(url, str) or not url.endswith(suffix)):
             _malformed("review pull_request_url did not match requested pull request")
+        commit_id = review.get("commit_id")
+        if commit_id is not None:
+            require_sha(commit_id, "review.commit_id")
     for item in checks:
         check = _mapping(item, "check-run item")
         _integer(check, "id", minimum=1)
+        _string(check, "name")
+        _string(check, "status")
         if require_sha(check.get("head_sha"), "check_run.head_sha") != head_sha:
             _malformed("check run did not belong to the acquired head SHA")
 

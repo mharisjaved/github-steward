@@ -9,6 +9,7 @@ scope:
     - "Implement bounded anonymous public GitHub pull-request acquisition, strict raw JSON validation, complete pagination, two-pass consistency, canonical snapshots, deterministic delivery identity, existing GS-I2 durable intake, and a JSON CLI from accepted main 8120a414e7b807a86d99f1d1bd35cdd06d72bb68."
     - "Validate offline with fake HTTP, CPython 3.12, frozen uv, local PostgreSQL 16 disposable databases, full branch coverage, the pinned AFEF validator, and persistent evidence."
     - "Run one bounded unauthenticated GET-only public smoke for Harry5174/github-steward PR 1 and create one local candidate commit with the authorized subject."
+    - "Apply GS-I3-CR1 as exactly one child of 3c4442940f82dc8334b68e37dc22e39effc452bb to close anonymous-client-default inheritance, check-suite completeness, and collection-item shape findings."
   out_of_scope:
     - "Authorization headers, tokens, private repositories, issue comments, GitHub mutation methods, connector use, push, pull request, merge, tag, release, deployment, or production-readiness claims."
     - "A new persistence path, asynchronous access, external queue, schema migration, response-body evidence archive, or any source commit beyond the one authorized candidate."
@@ -68,10 +69,12 @@ authorization_envelope:
     - "Preserve accepted main 8120a414e7b807a86d99f1d1bd35cdd06d72bb68 and create exactly one descendant commit with subject feat: add public read-only GitHub acquisition."
     - "Use only HTTPS api.github.com GET requests without Authorization, issue comments, private probes, GitHub CLI identity inspection, connector use, or any mutation capability."
     - "Keep automated tests offline, use the existing project RFC 8785 and GS-I2 persistence boundaries, and add no migration unless representation is unsafe."
+    - "Create exactly one GS-I3-CR1 correction commit with subject fix: harden GS-I3 anonymous acquisition and produce separate GS-I3-CR1 evidence."
   stop_conditions:
     - "Stop on baseline, ancestry, scope, authentication, public-host, required validation, persistence, cleanup, or evidence failure."
 deliverables:
   - "SPEC-0004, this work record, bounded runtime implementation, offline tests, public smoke result, one candidate commit, bundle, and verified evidence archive."
+  - "One direct-child GS-I3-CR1 correction commit and a separately verified GS-I3-CR1 bundle and evidence archive."
 implementation_state: implemented
 implementer:
   actor_id: "local-ide-agent-gs-i3"
@@ -83,6 +86,12 @@ validation_summaries:
   - check: "Public live smoke"
     result: passed
     summary: "Anonymous GET-only api.github.com acquisition of Harry5174/github-steward PR 1 completed, durably created exactly one inbox/work pair, and removed the designated GS-I3 disposable database."
+  - check: "GS-I3-CR1 correction closure"
+    result: passed
+    summary: "Adversarial anonymous-client defaults, exact-head check-suite boundaries 999/1000/1001, non-object and malformed collection entries, complete PostgreSQL and static validation, and 100 percent GS-I3 module branch coverage pass."
+  - check: "GS-I3-CR1 public live smoke"
+    result: passed
+    summary: "Seven exact public api.github.com GET requests used only allowlisted application headers with Authorization and Cookie absent, included 3 exact-head check suites, created one durable inbox/work pair, followed no redirect, and left zero correction databases."
 reviews:
   - review_id: "GS-I3-IMPLEMENTATION-SUPERVISOR"
     status: pending

@@ -14,6 +14,7 @@ SNAPSHOT_SCHEMA_ID: Final = "github.pull_request_snapshot.v1"
 MAX_FILES: Final = 3_000
 MAX_COMMITS: Final = 250
 MAX_CHECK_RUNS: Final = 1_000
+MAX_CHECK_SUITES: Final = 1_000
 MAX_PAGES: Final = 100
 _NAME: Final = re.compile(r"^[A-Za-z0-9_.-]+$")
 _SHA: Final = re.compile(r"^[0-9a-f]{40}$")

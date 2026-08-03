@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 
 import httpx
 import pytest
@@ -59,6 +59,61 @@ def test_exact_headers_get_only_and_pagination_link() -> None:
     assert github.audit[0].method == "GET"
     assert github.audit[0].host == "api.github.com"
     assert not any(hasattr(github, name) for name in ("post", "put", "patch", "delete"))
+
+
+def test_client_defaults_cannot_break_anonymity_or_follow_redirects() -> None:
+    requests: list[httpx.Request] = []
+
+    class PoisonAuth(httpx.Auth):
+        calls = 0
+
+        def auth_flow(
+            self, request: httpx.Request
+        ) -> Generator[httpx.Request, httpx.Response, None]:
+            self.calls += 1
+            request.headers["Authorization"] = "inherited-auth"
+            yield request
+
+    authentication = PoisonAuth()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.method == "GET"
+        assert request.url == httpx.URL(
+            "https://api.github.com/anonymous?explicit=true"
+        )
+        assert set(request.headers) == {
+            "host",
+            "accept",
+            "x-github-api-version",
+            "user-agent",
+        }
+        assert "authorization" not in request.headers
+        assert "cookie" not in request.headers
+        return httpx.Response(
+            302,
+            content=b"{}",
+            headers={"Location": "https://evil.example/redirected"},
+        )
+
+    http = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        headers={"Authorization": "inherited-header", "X-Untrusted": "bad"},
+        auth=authentication,
+        cookies={"session": "inherited-cookie"},
+        params={"inherited": "query"},
+        follow_redirects=True,
+    )
+    github = PublicGitHubRestClient(http, maximum_attempts=1)
+    try:
+        with pytest.raises(AcquisitionError) as raised:
+            github.get("/anonymous?explicit=true")
+    finally:
+        http.close()
+    assert raised.value.outcome is AcquisitionOutcome.MALFORMED_RESPONSE
+    assert authentication.calls == 0
+    assert len(requests) == 1
+    assert requests[0].url.host == "api.github.com"
 
 
 @pytest.mark.parametrize(

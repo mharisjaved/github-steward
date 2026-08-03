@@ -135,16 +135,14 @@ class PublicGitHubRestClient:
         last_timeout: httpx.TimeoutException | None = None
         for attempt in range(self._maximum_attempts):  # pragma: no branch
             try:
-                with self._client.stream(
-                    "GET",
-                    url,
-                    headers={
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": API_VERSION,
-                        "User-Agent": "github-steward",
-                    },
-                    timeout=REQUEST_TIMEOUT,
-                ) as response:
+                request = self._anonymous_request(url)
+                response = self._client.send(
+                    request,
+                    stream=True,
+                    auth=None,
+                    follow_redirects=False,
+                )
+                try:
                     raw = self._bounded_body(response.iter_bytes())
                     classification = self._classification(response)
                     self._record(url, classification)
@@ -165,6 +163,8 @@ class PublicGitHubRestClient:
                         path=urlsplit(url).path
                         + (f"?{urlsplit(url).query}" if urlsplit(url).query else ""),
                     )
+                finally:
+                    response.close()
             except httpx.TimeoutException as exc:
                 last_timeout = exc
                 self._record(url, AcquisitionOutcome.TIMEOUT.value)
@@ -180,6 +180,20 @@ class PublicGitHubRestClient:
         raise AcquisitionError(
             AcquisitionOutcome.TIMEOUT, "GitHub request timed out"
         ) from last_timeout
+
+    @staticmethod
+    def _anonymous_request(url: str) -> httpx.Request:
+        request = httpx.Request(
+            "GET",
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": API_VERSION,
+                "User-Agent": "github-steward",
+            },
+        )
+        request.extensions["timeout"] = REQUEST_TIMEOUT.as_dict()
+        return request
 
     def _validated_url(self, path_or_url: str) -> str:
         url = API_ORIGIN + path_or_url if path_or_url.startswith("/") else path_or_url
