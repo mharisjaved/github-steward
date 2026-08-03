@@ -114,7 +114,7 @@ validation_summaries:
     summary: "Deterministic local tests cover exact decoded mapping, concurrency, lease and retry boundaries, pointer outcomes, migration round-trips, schema invariants, all required fault boundaries, commit-before-ack replay, and bounded recovery."
   - check: "Global line and branch coverage"
     result: passed
-    summary: "All source lines and decision branches are covered, exceeding the required 95 percent global branch threshold."
+    summary: "The four mandated GS-I2 decision modules have 100 percent branch coverage. The complete project records 967 of 970 lines and 127 of 128 branches, or 99.22 percent global branch coverage, exceeding the required 95 percent."
   - check: "Pinned AFEF v0.2.0 validator"
     result: passed
     summary: "The cleared-environment pinned validator exits zero with empty standard output and standard error and does not mutate the project."
@@ -145,4 +145,4 @@ known_limitations:
   - "The synthetic boundary accepts decoded mappings only; raw JSON parsing and duplicate object-key detection remain deferred."
   - "GitHub and all remote or externally effectful behavior remain prohibited and unimplemented."
   - "Local disposable-database evidence is not a production database, operations, security, deployment, or readiness claim."
-next_action: "Complete the locked final validation and evidence package, create the one authorized local candidate commit, and return it to the GS-I2 Implementation Supervisor for independent inspection."
+next_action: "Return the exact candidate and persistent evidence to the GS-I2 Implementation Supervisor for independent inspection."

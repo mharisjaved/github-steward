@@ -83,6 +83,14 @@ class PostgresInboxWorkRepository:
         delivery: Delivery,
         work: WorkRecord,
     ) -> DeliveryIngressResult:
+        self._connection.execute(
+            sa.select(
+                sa.func.pg_advisory_xact_lock(
+                    sa.func.hashtext(delivery.provider),
+                    sa.func.hashtext(delivery.provider_delivery_id),
+                )
+            )
+        )
         statement = (
             pg_insert(delivery_inbox)
             .values(
@@ -96,7 +104,12 @@ class PostgresInboxWorkRepository:
                 canonical_payload=to_json_compatible(delivery.payload),
                 payload_digest_format=delivery.payload_digest.format,
             )
-            .on_conflict_do_nothing()
+            .on_conflict_do_nothing(
+                index_elements=[
+                    delivery_inbox.c.provider,
+                    delivery_inbox.c.provider_delivery_id,
+                ]
+            )
             .returning(delivery_inbox.c.delivery_id)
         )
         inserted = self._connection.execute(statement).scalar_one_or_none()

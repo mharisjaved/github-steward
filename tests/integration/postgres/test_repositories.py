@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import sqlalchemy as sa
+from psycopg.errors import UniqueViolation
 from sqlalchemy.engine import Engine
 
 from github_steward.adapters.canonicalization.rfc8785 import envelope_payload
@@ -18,6 +19,10 @@ from github_steward.adapters.postgres.metadata import (
 from github_steward.adapters.postgres.unit_of_work import PostgresUnitOfWork
 from github_steward.application.local_processing import SyntheticReceiptService
 from github_steward.domain.processing import (
+    DELIVERY_SCHEMA_ID,
+    PROVIDER,
+    SCHEMA_VERSION,
+    WORK_TYPE,
     AttemptState,
     FailureKind,
     FaultPoint,
@@ -25,12 +30,14 @@ from github_steward.domain.processing import (
 )
 from github_steward.ports.persistence import (
     ClaimOutcome,
+    Delivery,
     DeliveryIngressOutcome,
     LeaseOperationOutcome,
     LeaseToken,
     ObservationPointer,
     ObservationVersionId,
     WorkLease,
+    WorkRecord,
     WorkRecordId,
 )
 
@@ -138,6 +145,110 @@ def test_atomic_receipt_idempotency_and_durable_payload(
                 .where(work_record.c.work_record_id == created.work_record_id)
             )
             == 1
+        )
+
+
+def test_unrelated_delivery_unique_conflict_is_not_swallowed(
+    postgres_engine: Engine,
+) -> None:
+    created = receipt_service(postgres_engine).receive(
+        provider_delivery_id="unrelated-conflict-original",
+        mapping=mapping(entity_id="unrelated-conflict-original"),
+    )
+    with postgres_engine.connect() as connection:
+        original_delivery = dict(
+            connection.execute(
+                sa.select(delivery_inbox).where(
+                    delivery_inbox.c.delivery_id == created.delivery_id
+                )
+            )
+            .mappings()
+            .one()
+        )
+        original_work = dict(
+            connection.execute(
+                sa.select(work_record).where(
+                    work_record.c.work_record_id == created.work_record_id
+                )
+            )
+            .mappings()
+            .one()
+        )
+
+    conflicting_provider_delivery_id = "unrelated-conflict-new-identity"
+    conflicting_work_id = WorkRecordId("00000000-0000-0000-0000-000000000090")
+    conflicting_envelope = envelope_payload(
+        mapping(entity_id="unrelated-conflict-new-identity")
+    )
+    conflicting_delivery = Delivery(
+        delivery_id=created.delivery_id,
+        provider=PROVIDER,
+        provider_delivery_id=conflicting_provider_delivery_id,
+        payload_schema_id=DELIVERY_SCHEMA_ID,
+        payload_schema_version=SCHEMA_VERSION,
+        payload=conflicting_envelope.payload,
+        payload_digest=conflicting_envelope.digest,
+        received_at=NOW,
+    )
+    conflicting_work = WorkRecord(
+        work_record_id=conflicting_work_id,
+        delivery_id=created.delivery_id,
+        work_type=WORK_TYPE,
+        available_at=NOW,
+    )
+
+    with factory(postgres_engine)() as unit:
+        with pytest.raises(sa.exc.IntegrityError) as raised:
+            unit.inbox.create_delivery_and_work(
+                delivery=conflicting_delivery,
+                work=conflicting_work,
+            )
+        original_error = raised.value.orig
+        assert isinstance(original_error, UniqueViolation)
+        assert original_error.sqlstate == "23505"
+        assert original_error.diag.constraint_name == "pk_delivery_inbox"
+        unit.rollback()
+
+    with postgres_engine.connect() as connection:
+        preserved_delivery = dict(
+            connection.execute(
+                sa.select(delivery_inbox).where(
+                    delivery_inbox.c.delivery_id == created.delivery_id
+                )
+            )
+            .mappings()
+            .one()
+        )
+        preserved_work = dict(
+            connection.execute(
+                sa.select(work_record).where(
+                    work_record.c.work_record_id == created.work_record_id
+                )
+            )
+            .mappings()
+            .one()
+        )
+        assert preserved_delivery == original_delivery
+        assert preserved_work == original_work
+        assert (
+            connection.scalar(
+                sa.select(sa.func.count())
+                .select_from(delivery_inbox)
+                .where(
+                    delivery_inbox.c.provider == PROVIDER,
+                    delivery_inbox.c.provider_delivery_id
+                    == conflicting_provider_delivery_id,
+                )
+            )
+            == 0
+        )
+        assert (
+            connection.scalar(
+                sa.select(sa.func.count())
+                .select_from(work_record)
+                .where(work_record.c.work_record_id == conflicting_work_id)
+            )
+            == 0
         )
 
 
