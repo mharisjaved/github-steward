@@ -1,0 +1,1 @@
+"""Public GitHub transport adapters."""
