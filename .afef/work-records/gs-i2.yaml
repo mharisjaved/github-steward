@@ -1,0 +1,148 @@
+# AFEF v0.2.0 High Assurance work record.
+schema_version: "0.2.0"
+work_id: "GS-I2"
+related_specifications:
+  - "SPEC-0003"
+risk_profile: high_assurance
+scope:
+  in_scope:
+    - "Implement decoded-mapping synthetic receipt, deterministic durable local processing, exact lease/retry behavior, explicit pointer create/CAS, classified failure, and bounded expired-work recovery from accepted parent c956a912ad8f541c7edb9ad20523a63f960d8e82."
+    - "Add exactly one linear gs_i2_0002 migration while retaining eight tables, five append-only trigger targets, synchronous SQLAlchemy Core, Psycopg 3, PostgreSQL READ COMMITTED, and application-owned transactions."
+    - "Validate with CPython 3.12, frozen offline uv, exact-pattern local PostgreSQL 16 disposable databases, at least 95 percent global branch coverage, pinned AFEF v0.2.0, persistent evidence, one candidate bundle, and one safe evidence archive."
+    - "Create exactly one local direct-descendant candidate commit on gs-i2-durable-local-processing-recovery with the authorized subject."
+  out_of_scope:
+    - "Raw JSON authority or duplicate object-key detection; GitHub credentials, APIs, SDKs, remote reads or writes, webhooks, HTTP ingress, OAuth, sessions, or remote Git operations."
+    - "Asynchronous database access, external queue, Redis, broker, scheduler, execution worker, GitHub write, LLM, agent framework, plugin runtime, Artifact 07 reuse, deployment, publication, release, or production-readiness claim."
+    - "Dependency or lockfile changes, a ninth table, a second GS-I2 migration or head, edits to accepted GS-I1 records or root migration, self-review, independent-review conclusion, or final acceptance."
+authorization_envelope:
+  operations:
+    - operation_id: "OP-GS-I2-LOCAL-READS"
+      effect_class: local-read
+      decision: permitted
+      authorization_requirement: bounded_work_envelope
+      description: "Read the accepted repository, pinned AFEF checkout, host-preflight evidence, local PostgreSQL facts, and local validation outputs."
+    - operation_id: "OP-GS-I2-ALLOWLIST-WRITES"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Modify only the exact GS-I2 repository path allowlist on the one authorized local branch."
+    - operation_id: "OP-GS-I2-DISPOSABLE-DATABASES"
+      effect_class: local-destructive
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create and remove only database names matching ^github_steward_gs_i2_[0-9a-f]{24}$."
+    - operation_id: "OP-GS-I2-CANDIDATE-COMMIT"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create one direct-descendant local candidate commit with the exact authorized subject."
+    - operation_id: "OP-GS-I2-PERSISTENT-EVIDENCE"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create credential-redacted implementation evidence, a self-contained candidate bundle, and a safe archive in the authorized persistent evidence root."
+    - operation_id: "OP-GS-I2-REMOTE-READS-AND-WRITES"
+      effect_class: external-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "GitHub access, remote Git, package-index access, external queues, HTTP calls, and every other network resource are prohibited."
+    - operation_id: "OP-GS-I2-DEPLOYMENT-PUBLICATION"
+      effect_class: publication-release
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "Deployment, release, tag, publication, push, pull request, merge, and acceptance are prohibited."
+  authorization_references:
+    - authorization_id: "AUTH-GS-I2-PRODUCT-OWNER"
+      reference: "Product Owner GS-I2 Durable Local Processing and Recovery bounded IDE Agent implementation authorization, including exact parent, branch, commit subject, affected paths, database pattern, one pass, one commit, persistent evidence, bundle, archive, and prohibited-action boundary."
+      operation_ids:
+        - "OP-GS-I2-ALLOWLIST-WRITES"
+        - "OP-GS-I2-DISPOSABLE-DATABASES"
+        - "OP-GS-I2-CANDIDATE-COMMIT"
+        - "OP-GS-I2-PERSISTENT-EVIDENCE"
+  affected_paths:
+    - ".afef/project-manifest.yaml"
+    - ".afef/specifications/gs-i2-durable-local-processing.md"
+    - ".afef/work-records/gs-i2.yaml"
+    - "src/github_steward/domain/errors.py"
+    - "src/github_steward/domain/processing.py"
+    - "src/github_steward/ports/__init__.py"
+    - "src/github_steward/ports/clock.py"
+    - "src/github_steward/ports/persistence.py"
+    - "src/github_steward/application/local_processing.py"
+    - "src/github_steward/infrastructure/clock.py"
+    - "src/github_steward/adapters/postgres/metadata.py"
+    - "src/github_steward/adapters/postgres/repositories.py"
+    - "src/github_steward/adapters/postgres/unit_of_work.py"
+    - "migrations/versions/0002_gs_i2_durable_processing.py"
+    - "tests/unit/domain/test_processing.py"
+    - "tests/contract/test_repository_ports.py"
+    - "tests/architecture/test_boundaries.py"
+    - "tests/integration/postgres/conftest.py"
+    - "tests/integration/postgres/test_concurrency.py"
+    - "tests/integration/postgres/test_migrations.py"
+    - "tests/integration/postgres/test_schema_invariants.py"
+    - "tests/integration/postgres/test_repositories.py"
+    - "tests/integration/postgres/test_local_processing.py"
+    - "tests/integration/postgres/test_recovery.py"
+  constraints:
+    - "Preserve accepted parent c956a912ad8f541c7edb9ad20523a63f960d8e82 and create exactly one one-parent descendant commit with subject feat: add durable local processing and recovery."
+    - "Use CPython 3.12, frozen offline uv, synchronous SQLAlchemy Core and Psycopg 3, PostgreSQL READ COMMITTED, one linear Alembic chain, eight tables, and no dependency change."
+    - "Use an explicit Clock port with lease duration 300 seconds, retry delay 60 seconds, attempt ceiling 3, and reconciliation batch limit 100."
+    - "No repository commits or rolls back; no transaction remains open during deterministic CPU-only processing; raw JSON never becomes authoritative."
+    - "Run only exact-pattern disposable PostgreSQL databases and prove zero matching databases before and after every complete test phase."
+  stop_conditions:
+    - "Stop if accepted identity, history, clean state, branch availability, host evidence, CPython, PostgreSQL version or role, zero-database precondition, offline dependency state, or AFEF identity differs."
+    - "Stop if an unauthorized path, dependency, root migration edit, ninth table, second migration head, raw JSON authority, remote action, external effect, async or external queue, deployment, or production-readiness claim is required."
+    - "Stop if exact locked validation, 95 percent global branch coverage, real PostgreSQL guarantees, pinned AFEF validation, protected hashes, exact cleanup, credential scan, bundle, or safe archive cannot pass."
+deliverables:
+  - "SPEC-0003, this separate-authority work record, bounded runtime implementation, exact linear migration, and deterministic local tests."
+  - "One direct-descendant local candidate commit and self-contained verified Git bundle."
+  - "Credential-redacted persistent implementation evidence, completion reports, file-hash manifest, fault matrix, PostgreSQL cleanup proof, and safe verified archive."
+implementation_state: implemented
+implementer:
+  actor_id: "local-ide-agent-gs-i2"
+  role: ide_agent
+validation_summaries:
+  - check: "Frozen offline dependency synchronization"
+    result: passed
+    summary: "Explicit CPython 3.12 frozen/offline synchronization completed with no dependency-file mutation and no network connection syscall."
+  - check: "Ruff, strict mypy, and Import Linter"
+    result: passed
+    summary: "Locked offline formatting, lint, strict typing, and dependency-boundary checks pass without configuration change."
+  - check: "Unit, contract, architecture, and PostgreSQL integration behavior"
+    result: passed
+    summary: "Deterministic local tests cover exact decoded mapping, concurrency, lease and retry boundaries, pointer outcomes, migration round-trips, schema invariants, all required fault boundaries, commit-before-ack replay, and bounded recovery."
+  - check: "Global line and branch coverage"
+    result: passed
+    summary: "The four mandated GS-I2 decision modules have 100 percent branch coverage. The complete project records 967 of 970 lines and 127 of 128 branches, or 99.22 percent global branch coverage, exceeding the required 95 percent."
+  - check: "Pinned AFEF v0.2.0 validator"
+    result: passed
+    summary: "The cleared-environment pinned validator exits zero with empty standard output and standard error and does not mutate the project."
+evidence_references: []
+reviews:
+  - review_id: "GS-I2-IMPLEMENTATION-SUPERVISOR"
+    status: pending
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+independent_review:
+  status: pending
+  reviewer:
+    actor_id: "github-steward-independent-reviewer"
+    role: independent_reviewer
+final_gate:
+  status: not_issued
+  owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+human_checkpoint:
+  status: awaiting
+  owner:
+    actor_id: "github-steward-implementation-supervisor"
+    role: implementation_supervisor
+  next_required_action: "Inspect the exact local GS-I2 candidate commit, bundle, and persistent evidence; the IDE Agent may not self-review, independently accept, publish, deploy, or issue the final gate."
+known_limitations:
+  - "The synthetic boundary accepts decoded mappings only; raw JSON parsing and duplicate object-key detection remain deferred."
+  - "GitHub and all remote or externally effectful behavior remain prohibited and unimplemented."
+  - "Local disposable-database evidence is not a production database, operations, security, deployment, or readiness claim."
+next_action: "Return the exact candidate and persistent evidence to the GS-I2 Implementation Supervisor for independent inspection."

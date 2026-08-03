@@ -23,6 +23,10 @@ constitution:
     - "Report exact evidence and never overclaim production readiness."
     - "Keep GS-I1 and all GitHub integration subject to separate Product Owner authorization."
 paths:
+  documentation: "README.md"
+  source: "src"
+  tests: "tests"
+  architecture: ".afef/specifications"
   specifications: ".afef/specifications"
   work_records: ".afef/work-records"
 default_risk_profile: standard
@@ -31,3 +35,17 @@ safety_boundaries:
   - "No local Sprint 1 implementation, dependency selection, application code, test, CI, deployment, or environment setup is authorized by GS-A0."
   - "Exactly one local initial root commit containing only the four authorized GS-A0 files is authorized; push, pull request, merge, tag, publication, deployment, and every other remote mutation remain prohibited."
   - "The architecture readiness disposition permits a separately authorized local Sprint 1; it does not authorize GS-I1."
+  - "GS-I1 is bounded to its separately authorized local branch, one candidate commit, exact affected-path allowlist, disposable local PostgreSQL databases, and authenticated-free PyPI reads."
+  - "GS-I1 does not authorize GitHub access, remote Git operations, production roles, deployment, publication, self-review, acceptance, or GS-I2."
+  - "GS-I2 is bounded to accepted parent c956a912ad8f541c7edb9ad20523a63f960d8e82, one local branch, one direct-descendant candidate commit, the exact affected-path allowlist, and exact-pattern disposable local PostgreSQL databases."
+  - "GS-I2 accepts only decoded synthetic mappings and adds deterministic local processing and recovery; raw JSON authority, GitHub access, remote Git, external queues, asynchronous persistence, execution work, deployment, publication, and production-readiness claims remain prohibited."
+ownership:
+  project_owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+  specification_approver:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+  final_gate_owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
