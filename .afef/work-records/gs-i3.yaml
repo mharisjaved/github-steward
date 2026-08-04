@@ -13,7 +13,7 @@ scope:
     - "Apply GS-I3-CR2 as one local direct descendant of merged main 6422bdaa46cd9d5aa1e108b01879102b358531b0 to remediate the post-merge reopened anonymous transport-boundary and canonical relationship-URL findings, preserve check-suite regression protection, and produce exact-candidate raw evidence."
     - "Apply GS-I3-CR3 as exactly one direct child of rejected CR2 commit eb06320257e233b76109c2244d0dff712dfd2ac4 to enforce canonical serialized HTTPX request targets and bind every next page to its response-producing semantic endpoint."
   out_of_scope:
-    - "Authorization headers, tokens, private repositories, issue comments, GitHub mutation methods, connector use, push, pull request, merge, tag, release, deployment, or production-readiness claims."
+    - "Within the GS-I3 product boundary: Authorization headers, tokens, private repositories, issue comments, GitHub mutation methods, connector use, push, pull request, merge, tag, release, deployment, or production-readiness claims. Repository lifecycle integration is separately bounded by GS-I3-C1 authorization and does not add product write capability."
     - "A new persistence path, asynchronous access, external queue, schema migration, response-body evidence archive, or any source commit beyond the one authorized candidate."
     - "GS-I1 or GS-I2 lifecycle reconciliation, CI implementation, the next feature sprint, self-review, formal finding closure, final GREEN, publication, or merge authority."
 authorization_envelope:
@@ -43,6 +43,11 @@ authorization_envelope:
       decision: prohibited
       authorization_requirement: not_applicable
       description: "Every GitHub write, remote Git mutation, publication, and deployment is prohibited."
+    - operation_id: "OP-GS-I3-C1-REMOTE-INTEGRATION"
+      effect_class: external-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Integrate the immutable accepted CR3 candidate and one documentation-only lifecycle closeout through normal merge-commit pull requests without protection bypass, tag, release, or deployment."
   authorization_references:
     - authorization_id: "AUTH-GS-I3-PRODUCT-OWNER"
       reference: "Product Owner GS-I3 bounded IDE Agent authorization for one local implementation pass, one candidate commit, disposable PostgreSQL, public unauthenticated GitHub GET requests, and persistent evidence."
@@ -62,6 +67,10 @@ authorization_envelope:
         - "OP-GS-I3-LOCAL-WRITES"
         - "OP-GS-I3-DISPOSABLE-DATABASES"
         - "OP-GS-I3-PUBLIC-READS"
+    - authorization_id: "AUTH-GS-I3-C1-PRODUCT-OWNER"
+      reference: "Product Owner GS-I3-C1 post-acceptance integration and closeout authorization recorded on 2026-08-04 for exact CR3 merge-commit integration, one documentation-only closeout commit and pull request, and persistent external completion evidence."
+      operation_ids:
+        - "OP-GS-I3-C1-REMOTE-INTEGRATION"
   affected_paths:
     - ".afef/project-manifest.yaml"
     - ".afef/specifications/gs-i3-public-read-only-acquisition.md"
@@ -89,6 +98,7 @@ authorization_envelope:
     - "Construct the production HTTPX client and real transport only in project-owned infrastructure; retain only a narrow fake-transport seam under the same final-request policy wrapper and validate review relationship URLs as exact canonical semantic identity."
     - "Preserve rejected CR2 without rewrite and create exactly one direct-child CR3 commit on gs-i3-cr3-transport-pagination-binding with subject fix: bind GS-I3 transport and pagination identity; add no dependency, lock, migration, persistence path, GitHub authority, or second correction commit."
     - "Use one adapter-owned typed endpoint model for original input, Link targets, and final HTTPX raw_path validation; bind every paginated next link to the exact owner, repository, subject, endpoint kind, canonical path, invariant query, and current-page identity that produced it."
+    - "Under GS-I3-C1 only, preserve accepted CR3 commit 442c512d1c57a52206df8fa70555251459c7c928 unchanged through a normal merge commit, then create and integrate exactly one documentation-only lifecycle closeout commit without protection bypass."
   stop_conditions:
     - "Stop on baseline, ancestry, scope, authentication, public-host, required validation, persistence, cleanup, or evidence failure."
 deliverables:
@@ -96,7 +106,8 @@ deliverables:
   - "One direct-child GS-I3-CR1 correction commit and a separately verified GS-I3-CR1 bundle and evidence archive."
   - "One direct-descendant GS-I3-CR2 correction commit plus credential-redacted raw validation, one public-smoke request audit, a verified bundle, and a safe exact-candidate evidence archive pending both required reviews."
   - "One direct-child GS-I3-CR3 correction commit plus fresh focused reproduction, complete raw validation, one bounded anonymous smoke, cleanup proof, verified bundle, and safe evidence archive for Implementation Supervisor review; High Assurance Independent Review remains separately gated and not yet authorized."
-implementation_state: implemented
+  - "One GS-I3-C1 remote integration by merge-commit PR 3, followed by one documentation-only closeout commit and pull request, with verified persistent completion evidence outside the repository."
+implementation_state: verified
 implementer:
   actor_id: "local-ide-agent-gs-i3"
   role: ide_agent
@@ -126,37 +137,51 @@ validation_summaries:
     result: passed
     summary: "IMPLEMENTED_PENDING_SUPERVISOR_AND_INDEPENDENT_VERIFICATION: pre-commit validation passes 533 offline tests, including 276 adapter boundary cases and 9 PostgreSQL acquisition cases; combined branch-mode coverage is 99.80 percent and every GS-I3 module has 100 percent branch coverage. The exact CR2 raw-path and foreign-pagination reproductions now fail closed with no prohibited transport delegation or durable-table change."
   - check: "GS-I3-CR3 exact-candidate review and evidence"
-    result: not_run
-    summary: "Post-commit exact-candidate validation, one authorized public smoke, fresh evidence packaging, and Implementation Supervisor review follow this repository snapshot. High Assurance Independent Review is not yet authorized; GS-I3-EVID-001 remains open."
+    result: passed
+    summary: "Implementation Supervisor GREEN, Independent Reviewer GREEN, and final evidence-only rereview GREEN accepted exact CR3 commit 442c512d1c57a52206df8fa70555251459c7c928 and closed GS-I3-ANON-001, GS-I3-SHAPE-001, GS-I3-CHECK-001 with regression protection, GS-I3-EVID-001, and GS-I3-CR3-IR-EVID-001. This supersedes the candidate-stage pending conclusion and the rejected CR2 result without removing either history."
+  - check: "GS-I3-CR3 accepted remote integration"
+    result: passed
+    summary: "Product Owner acceptance was recorded on 2026-08-04. PR 3 integrated exact CR3 by normal merge commit c95c9a4c81d34494d80aa740f956f70ad08f633d with original PR 2 merge 6422bdaa46cd9d5aa1e108b01879102b358531b0 as first parent and CR3 as second parent; no protection bypass, tag, release, or deployment occurred."
+  - check: "GS-I3 lifecycle closeout"
+    result: passed
+    summary: "implementation=COMPLETE; implementation_supervisor=GREEN; independent_review=GREEN; product_owner_acceptance=ACCEPTED; remote_integration=COMPLETE; status=FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED. The next major stage remains proposed and not authorized."
 reviews:
   - review_id: "GS-I3-IMPLEMENTATION-SUPERVISOR"
-    status: pending
+    status: completed
     reviewer:
       actor_id: "github-steward-implementation-supervisor"
       role: implementation_supervisor
+    recommendation: accept
+    evidence_reference: ".afef/specifications/gs-i3-public-read-only-acquisition.md"
   - review_id: "GS-I3-CR3-IMPLEMENTATION-SUPERVISOR"
-    status: pending
+    status: completed
     reviewer:
       actor_id: "github-steward-implementation-supervisor"
       role: implementation_supervisor
+    recommendation: accept
+    evidence_reference: ".afef/specifications/gs-i3-public-read-only-acquisition.md"
 independent_review:
-  status: pending
+  status: accepted
   reviewer:
     actor_id: "github-steward-independent-reviewer"
     role: independent_reviewer
+  evidence_reference: ".afef/specifications/gs-i3-public-read-only-acquisition.md"
+  reviewed_at: "2026-08-04T00:00:00Z"
 final_gate:
-  status: not_issued
+  status: accepted
   owner:
     actor_id: "github-steward-product-owner"
     role: product_owner
+  recorded_at: "2026-08-04T00:00:00Z"
 human_checkpoint:
-  status: awaiting
+  status: completed
   owner:
     actor_id: "github-steward-implementation-supervisor"
     role: implementation_supervisor
-  next_required_action: "Inspect the exact local GS-I3-CR3 candidate commit, bundle, and fresh persistent evidence; the IDE Agent may not publish, accept, or initiate the not-yet-authorized High Assurance Independent Review."
+  next_required_action: "No GS-I3 action remains. Any next major stage is proposed only and requires separate Product Owner authorization."
 known_limitations:
   - "Anonymous GitHub REST rate limits apply, upstream caps fail closed, and this bounded acquisition is not a production operations claim."
-  - "GS-I3-ANON-001 remains formally reopened with the CR3 raw-target subcorrection implemented pending review; GS-I3-SHAPE-001 remains formally reopened with pagination identity binding implemented pending review; GS-I3-CHECK-001 remains closed with regression protection; and GS-I3-EVID-001 remains open."
-  - "CR3 supersedes CR2 only as a local correction attempt. Implementation Supervisor review is pending, High Assurance Independent Review is not yet authorized, and push and merge remain unauthorized."
-next_action: "Return the exact local GS-I3-CR3 candidate and fresh raw persistent evidence for Implementation Supervisor review; do not initiate independent review, push, merge, reconcile other lifecycle records, or begin another feature."
+  - "Historical candidate-stage records that left GS-I3-ANON-001, GS-I3-SHAPE-001, and GS-I3-EVID-001 open are superseded by the accepted CR3 review chain; they remain in this record for traceability."
+  - "Rejected CR2 commit eb06320257e233b76109c2244d0dff712dfd2ac4 remains visible as CR3's rejected parent and must not be treated as an accepted candidate."
+  - "GS-I3 closeout creates no tag, release, deployment, production-readiness claim, or product GitHub write authority."
+next_action: "GS-I3 is formally accepted, integrated, and closed. The next major stage is proposed but not authorized and must not begin without separate Product Owner authorization."
