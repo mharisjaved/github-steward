@@ -4,7 +4,7 @@ specification_id: "SPEC-0004"
 title: "GS-I3 Public Read-Only GitHub Acquisition"
 owner: "github-steward-product-owner"
 specification_status: active
-delivery_status: implemented
+delivery_status: verified
 dependencies:
   - "SPEC-0001"
   - "SPEC-0002"
@@ -164,11 +164,37 @@ not paginate. The accepted GS-I2 intake, RFC 8785 wrapper, synchronous HTTPX
 0.28.1 construction, redirect prohibition, strict review relationship, and
 check-suite completeness behavior remain unchanged.
 
-CR3 supersedes CR2 only as a local correction attempt. Its two subcorrections
-are `IMPLEMENTED_PENDING_SUPERVISOR_AND_INDEPENDENT_VERIFICATION` within the IDE
-Agent record. `GS-I3-ANON-001` and `GS-I3-SHAPE-001` remain formally reopened;
-`GS-I3-CHECK-001` remains closed with regression protection; and
-`GS-I3-EVID-001` remains open until exact-candidate evidence is independently
-verified. Implementation Supervisor review is pending, High Assurance
-Independent Review is not yet authorized, and push and merge remain
-unauthorized.
+At the CR3 candidate freeze, CR3 superseded CR2 only as a local correction
+attempt. Its two subcorrections were recorded as
+`IMPLEMENTED_PENDING_SUPERVISOR_AND_INDEPENDENT_VERIFICATION` within the IDE
+Agent record. At that historical checkpoint, `GS-I3-ANON-001` and
+`GS-I3-SHAPE-001` remained formally reopened, `GS-I3-CHECK-001` remained closed
+with regression protection, `GS-I3-EVID-001` remained open, Implementation
+Supervisor review was pending, High Assurance Independent Review was not yet
+authorized, and push and merge were unauthorized. Those candidate-stage
+conclusions are superseded by the accepted review and integration record below.
+
+## GS-I3 formal acceptance, integration, and closeout
+
+The completed assurance chain is GREEN: the Implementation Supervisor,
+Independent Reviewer, and final evidence-only rereview all accepted immutable
+CR3 commit `442c512d1c57a52206df8fa70555251459c7c928`, tree
+`9f21289459b266862c81e19ae21ac3d57bf30067`, with rejected CR2 commit
+`eb06320257e233b76109c2244d0dff712dfd2ac4` retained as its parent and as
+rejected intermediate history. CR3 is the accepted forward correction and
+supersedes CR2 without rewriting it.
+
+`GS-I3-ANON-001`, `GS-I3-SHAPE-001`, `GS-I3-CHECK-001`, `GS-I3-EVID-001`, and
+`GS-I3-CR3-IR-EVID-001` are closed; `GS-I3-CHECK-001` remains closed with
+regression protection. The Product Owner accepted GS-I3 on 2026-08-04.
+
+The original implementation and CR1 remain integrated by PR 2 at merge commit
+`6422bdaa46cd9d5aa1e108b01879102b358531b0`. The accepted CR3 lineage was later
+integrated by PR 3 using merge commit
+`c95c9a4c81d34494d80aa740f956f70ad08f633d`, which preserves CR3 as its second
+parent. GS-I3 implementation and remote integration are complete, and its
+lifecycle status is `FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED`.
+
+No tag, release, or deployment was created, and this closeout adds no GitHub
+write capability to the product. The next major stage remains proposed and is
+not authorized; it has not started.
