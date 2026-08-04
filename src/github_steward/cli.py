@@ -8,7 +8,6 @@ import os
 import sys
 from collections.abc import Sequence
 
-import httpx
 import sqlalchemy as sa
 
 from github_steward.adapters.canonicalization.rfc8785 import envelope_payload
@@ -45,16 +44,9 @@ def _run(target: RepositoryTarget) -> AcquisitionResult:
             AcquisitionOutcome.PERSISTENCE_FAILURE,
             "GITHUB_STEWARD_DATABASE_URL is required",
         )
-    timeout = httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0)
-    limits = httpx.Limits(max_connections=4, max_keepalive_connections=2)
     engine = sa.create_engine(database_url, pool_pre_ping=True)
     try:
-        with httpx.Client(
-            timeout=timeout,
-            limits=limits,
-            follow_redirects=False,
-        ) as client:
-            github = PublicGitHubRestClient(client)
+        with PublicGitHubRestClient() as github:
             receipt = SyntheticReceiptService(
                 unit_of_work_factory=lambda: PostgresUnitOfWork(engine),
                 clock=SystemClock(),

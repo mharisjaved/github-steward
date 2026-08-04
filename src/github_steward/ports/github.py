@@ -27,6 +27,17 @@ class RequestAudit:
     host: str
     path: str
     classification: str
+    scheme: str = "https"
+    port_classification: str = "default_https"
+    query: tuple[tuple[str, str], ...] = ()
+    application_headers: tuple[str, ...] = ()
+    credentials_absent: bool = True
+    raw_response_sha256: str | None = None
+    raw_target: str = ""
+    endpoint_kind: str = ""
+    semantic_identity: tuple[tuple[str, str], ...] = ()
+    current_page: int = 1
+    next_page: int | None = None
 
 
 class GitHubReadPort(Protocol):

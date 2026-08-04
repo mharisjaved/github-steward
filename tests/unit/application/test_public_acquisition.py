@@ -32,6 +32,7 @@ HEAD_B = "b" * 40
 HEAD_C = "c" * 40
 BASE = "d" * 40
 TARGET = RepositoryTarget("Harry5174", "github-steward", 1)
+REVIEW_URL = "https://api.github.com/repos/Harry5174/github-steward/pulls/1"
 
 
 def _response(
@@ -160,8 +161,7 @@ def _responses(
                 "id": 9,
                 "state": "APPROVED",
                 "commit_id": head,
-                "pull_request_url": "https://api.github.com/repos/"
-                "Harry5174/github-steward/pulls/1",
+                "pull_request_url": REVIEW_URL,
             }
         ]
     )
@@ -459,6 +459,7 @@ def test_primary_shape_and_identity_validation(
                 }
             ],
         ),
+        ("reviews", [{"id": 1, "state": "APPROVED"}]),
         (
             "checks",
             [{"id": 1, "name": "test", "status": "completed", "head_sha": HEAD_B}],
@@ -482,6 +483,83 @@ def test_collection_relationship_validation(
     assert receipt.calls == []
 
 
+def test_exact_canonical_review_relationship_url_is_valid() -> None:
+    result = _service(
+        FakeGitHub(
+            _responses(
+                reviews=[
+                    {
+                        "id": 1,
+                        "state": "APPROVED",
+                        "commit_id": HEAD_A,
+                        "pull_request_url": REVIEW_URL,
+                    }
+                ]
+            )
+        ),
+        FakeReceipt(),
+    ).acquire(TARGET)
+    assert result.pagination["reviews"] == 1
+
+
+@pytest.mark.parametrize(
+    "relationship_url",
+    [
+        REVIEW_URL.replace("https://", "http://"),
+        REVIEW_URL.replace("api.github.com", "evil.example"),
+        REVIEW_URL.replace("api.github.com", "api.github.com.evil.example"),
+        "https://evil.example/prefix"
+        + REVIEW_URL.removeprefix("https://api.github.com"),
+        REVIEW_URL.replace("api.github.com", "user@api.github.com"),
+        REVIEW_URL.replace("api.github.com", "api.github.com:444"),
+        REVIEW_URL.replace("api.github.com", "api.github.com:bad"),
+        REVIEW_URL.replace("/repos/", "/prefix/repos/"),
+        REVIEW_URL + "/suffix",
+        REVIEW_URL.replace("/pulls/1", "/pulls/./1"),
+        REVIEW_URL.replace("/github-steward/", "%2Fgithub-steward/"),
+        REVIEW_URL + "?page=1",
+        REVIEW_URL + "#fragment",
+        REVIEW_URL.replace("Harry5174", "OtherOwner"),
+        REVIEW_URL.replace("github-steward", "other-repository"),
+        REVIEW_URL.removesuffix("1") + "2",
+    ],
+    ids=[
+        "wrong-scheme",
+        "wrong-host",
+        "deceptive-host-suffix",
+        "evil-host-suffix-path",
+        "user-info",
+        "unexpected-port",
+        "malformed-port",
+        "path-prefix",
+        "path-suffix",
+        "dot-segment",
+        "percent-encoded-component",
+        "query",
+        "fragment",
+        "wrong-owner",
+        "wrong-repository",
+        "wrong-pull-number",
+    ],
+)
+def test_malformed_review_relationship_rolls_back_before_intake(
+    relationship_url: str,
+) -> None:
+    receipt = FakeReceipt()
+    reviews: list[object] = [
+        {
+            "id": 1,
+            "state": "APPROVED",
+            "commit_id": HEAD_A,
+            "pull_request_url": relationship_url,
+        }
+    ]
+    with pytest.raises(AcquisitionError) as raised:
+        _service(FakeGitHub(_responses(reviews=reviews)), receipt).acquire(TARGET)
+    assert raised.value.outcome is AcquisitionOutcome.MALFORMED_RESPONSE
+    assert receipt.calls == []
+
+
 @pytest.mark.parametrize("collection", ["files", "commits", "reviews", "checks"])
 def test_non_object_collection_entries_persist_nothing(collection: str) -> None:
     receipt = FakeReceipt()
@@ -501,8 +579,18 @@ def test_non_object_collection_entries_persist_nothing(collection: str) -> None:
 
 def test_multiple_reviews_and_null_commit_relationship_are_valid() -> None:
     reviews: list[object] = [
-        {"id": 1, "state": "COMMENTED", "commit_id": None},
-        {"id": 2, "state": "APPROVED", "commit_id": HEAD_A},
+        {
+            "id": 1,
+            "state": "COMMENTED",
+            "commit_id": None,
+            "pull_request_url": REVIEW_URL,
+        },
+        {
+            "id": 2,
+            "state": "APPROVED",
+            "commit_id": HEAD_A,
+            "pull_request_url": REVIEW_URL,
+        },
     ]
     result = _service(FakeGitHub(_responses(reviews=reviews)), FakeReceipt()).acquire(
         TARGET
