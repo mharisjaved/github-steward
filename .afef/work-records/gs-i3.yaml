@@ -11,6 +11,7 @@ scope:
     - "Run one bounded unauthenticated GET-only public smoke for Harry5174/github-steward PR 1 and create one local candidate commit with the authorized subject."
     - "Apply GS-I3-CR1 as exactly one child of 3c4442940f82dc8334b68e37dc22e39effc452bb to close anonymous-client-default inheritance, check-suite completeness, and collection-item shape findings."
     - "Apply GS-I3-CR2 as one local direct descendant of merged main 6422bdaa46cd9d5aa1e108b01879102b358531b0 to remediate the post-merge reopened anonymous transport-boundary and canonical relationship-URL findings, preserve check-suite regression protection, and produce exact-candidate raw evidence."
+    - "Apply GS-I3-CR3 as exactly one direct child of rejected CR2 commit eb06320257e233b76109c2244d0dff712dfd2ac4 to enforce canonical serialized HTTPX request targets and bind every next page to its response-producing semantic endpoint."
   out_of_scope:
     - "Authorization headers, tokens, private repositories, issue comments, GitHub mutation methods, connector use, push, pull request, merge, tag, release, deployment, or production-readiness claims."
     - "A new persistence path, asynchronous access, external queue, schema migration, response-body evidence archive, or any source commit beyond the one authorized candidate."
@@ -55,6 +56,12 @@ authorization_envelope:
         - "OP-GS-I3-LOCAL-WRITES"
         - "OP-GS-I3-DISPOSABLE-DATABASES"
         - "OP-GS-I3-PUBLIC-READS"
+    - authorization_id: "AUTH-GS-I3-CR3-PRODUCT-OWNER"
+      reference: "Product Owner GS-I3-CR3 authorization for one direct-child correction of rejected CR2, minimum endpoint/parser/tests/GS-I3-record changes, complete offline and PostgreSQL validation, one anonymous public smoke after exact-candidate validation, one local commit, and fresh external evidence for later Implementation Supervisor review."
+      operation_ids:
+        - "OP-GS-I3-LOCAL-WRITES"
+        - "OP-GS-I3-DISPOSABLE-DATABASES"
+        - "OP-GS-I3-PUBLIC-READS"
   affected_paths:
     - ".afef/project-manifest.yaml"
     - ".afef/specifications/gs-i3-public-read-only-acquisition.md"
@@ -80,12 +87,15 @@ authorization_envelope:
     - "Create exactly one GS-I3-CR1 correction commit with subject fix: harden GS-I3 anonymous acquisition and produce separate GS-I3-CR1 evidence."
     - "Preserve the merged GS-I3 history and create exactly one CR2 direct-descendant commit on gs-i3-cr2-post-merge-acquisition-hardening with subject fix: close GS-I3 post-merge trust-boundary findings."
     - "Construct the production HTTPX client and real transport only in project-owned infrastructure; retain only a narrow fake-transport seam under the same final-request policy wrapper and validate review relationship URLs as exact canonical semantic identity."
+    - "Preserve rejected CR2 without rewrite and create exactly one direct-child CR3 commit on gs-i3-cr3-transport-pagination-binding with subject fix: bind GS-I3 transport and pagination identity; add no dependency, lock, migration, persistence path, GitHub authority, or second correction commit."
+    - "Use one adapter-owned typed endpoint model for original input, Link targets, and final HTTPX raw_path validation; bind every paginated next link to the exact owner, repository, subject, endpoint kind, canonical path, invariant query, and current-page identity that produced it."
   stop_conditions:
     - "Stop on baseline, ancestry, scope, authentication, public-host, required validation, persistence, cleanup, or evidence failure."
 deliverables:
   - "SPEC-0004, this work record, bounded runtime implementation, offline tests, public smoke result, one candidate commit, bundle, and verified evidence archive."
   - "One direct-child GS-I3-CR1 correction commit and a separately verified GS-I3-CR1 bundle and evidence archive."
   - "One direct-descendant GS-I3-CR2 correction commit plus credential-redacted raw validation, one public-smoke request audit, a verified bundle, and a safe exact-candidate evidence archive pending both required reviews."
+  - "One direct-child GS-I3-CR3 correction commit plus fresh focused reproduction, complete raw validation, one bounded anonymous smoke, cleanup proof, verified bundle, and safe evidence archive for Implementation Supervisor review; High Assurance Independent Review remains separately gated and not yet authorized."
 implementation_state: implemented
 implementer:
   actor_id: "local-ide-agent-gs-i3"
@@ -108,12 +118,23 @@ validation_summaries:
     summary: "After PR 2 integrated GS-I3 and CR1 at merge commit 6422bdaa46cd9d5aa1e108b01879102b358531b0, later independent review superseded earlier assurance and reopened final assurance as AMBER: GS-I3-ANON-001 and GS-I3-SHAPE-001 reopened, GS-I3-CHECK-001 remained closed, and GS-I3-EVID-001 remained open."
   - check: "GS-I3-CR2 local remediation"
     result: passed
-    summary: "IMPLEMENTED_PENDING_INDEPENDENT_VERIFICATION: 328 offline tests pass with 99.78 percent global branch coverage and 100 percent for every GS-I3 module; PostgreSQL rejection paths, static checks, frozen lock, and one seven-request anonymous GET-only api.github.com smoke pass with one inbox/work pair and exact cleanup."
+    summary: "At CR2 implementation freeze, IMPLEMENTED_PENDING_INDEPENDENT_VERIFICATION was recorded after 328 offline tests, 99.78 percent global branch coverage, 100 percent for every GS-I3 module, PostgreSQL/static/lock checks, and one bounded public smoke passed; the later exact-candidate adversarial failure superseded this provisional implementation status."
   - check: "GS-I3-CR2 exact-candidate evidence review"
+    result: failed
+    summary: "CR2 stopped RED after its final policy delegated raw /repos/o/r/pulls/%31 and its Link parser accepted an Other/Repository pull request 2 continuation while acquiring Harry5174/github-steward pull request 1. Commit eb06320257e233b76109c2244d0dff712dfd2ac4 is rejected, unaccepted, unpushed, and unmerged history."
+  - check: "GS-I3-CR3 local correction implementation"
+    result: passed
+    summary: "IMPLEMENTED_PENDING_SUPERVISOR_AND_INDEPENDENT_VERIFICATION: pre-commit validation passes 533 offline tests, including 276 adapter boundary cases and 9 PostgreSQL acquisition cases; combined branch-mode coverage is 99.80 percent and every GS-I3 module has 100 percent branch coverage. The exact CR2 raw-path and foreign-pagination reproductions now fail closed with no prohibited transport delegation or durable-table change."
+  - check: "GS-I3-CR3 exact-candidate review and evidence"
     result: not_run
-    summary: "GS-I3-EVID-001 remains open while the IDE Agent creates the post-commit raw evidence, verified bundle, and safe archive; Implementation Supervisor and High Assurance Independent Review remain pending."
+    summary: "Post-commit exact-candidate validation, one authorized public smoke, fresh evidence packaging, and Implementation Supervisor review follow this repository snapshot. High Assurance Independent Review is not yet authorized; GS-I3-EVID-001 remains open."
 reviews:
   - review_id: "GS-I3-IMPLEMENTATION-SUPERVISOR"
+    status: pending
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+  - review_id: "GS-I3-CR3-IMPLEMENTATION-SUPERVISOR"
     status: pending
     reviewer:
       actor_id: "github-steward-implementation-supervisor"
@@ -133,8 +154,9 @@ human_checkpoint:
   owner:
     actor_id: "github-steward-implementation-supervisor"
     role: implementation_supervisor
-  next_required_action: "Inspect the exact local GS-I3 candidate commit, bundle, and persistent evidence; the IDE Agent may not publish or accept it."
+  next_required_action: "Inspect the exact local GS-I3-CR3 candidate commit, bundle, and fresh persistent evidence; the IDE Agent may not publish, accept, or initiate the not-yet-authorized High Assurance Independent Review."
 known_limitations:
   - "Anonymous GitHub REST rate limits apply, upstream caps fail closed, and this bounded acquisition is not a production operations claim."
-  - "GS-I3-ANON-001 and GS-I3-SHAPE-001 are implemented locally by CR2 but remain reopened pending independent verification; GS-I3-CHECK-001 remains closed with regression protection and GS-I3-EVID-001 remains open."
-next_action: "Create and return the exact local GS-I3-CR2 candidate and raw persistent evidence for Implementation Supervisor review followed by High Assurance Independent Review; push and merge remain unauthorized."
+  - "GS-I3-ANON-001 remains formally reopened with the CR3 raw-target subcorrection implemented pending review; GS-I3-SHAPE-001 remains formally reopened with pagination identity binding implemented pending review; GS-I3-CHECK-001 remains closed with regression protection; and GS-I3-EVID-001 remains open."
+  - "CR3 supersedes CR2 only as a local correction attempt. Implementation Supervisor review is pending, High Assurance Independent Review is not yet authorized, and push and merge remain unauthorized."
+next_action: "Return the exact local GS-I3-CR3 candidate and fresh raw persistent evidence for Implementation Supervisor review; do not initiate independent review, push, merge, reconcile other lifecycle records, or begin another feature."

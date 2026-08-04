@@ -45,6 +45,10 @@ acceptance_criteria:
     description: "The original GS-I3 and its direct-child CR1 were integrated by PR 2 at merge commit 6422bdaa46cd9d5aa1e108b01879102b358531b0; CR2 is exactly one local direct descendant of that merge with no history rewrite, push, pull request, merge, tag, release, deployment, authenticated GitHub access, or private probe."
   - id: "AC-0008"
     description: "CR2 preserves credential-redacted raw command output, machine-readable branch coverage, PostgreSQL and migration validation, exact Git identities, one public-smoke request audit, cleanup proof, a verified candidate bundle, and a safe verified evidence archive outside the repository."
+  - id: "AC-0009"
+    description: "CR3 uses one immutable six-kind canonical endpoint model for original targets, absolute Link targets, and the final HTTPX 0.28.1 raw request target; every serialized path and query is byte-canonical, and the final policy compares the delegated endpoint with its project-owned intended identity."
+  - id: "AC-0010"
+    description: "Every paginated endpoint binds owner, repository, pull number or exact head SHA, endpoint kind, path, per-page value, filter and complete invariant query identity to the response-producing page, permits only the exact next page, and rejects before a cross-identity or nonconsecutive request can be delegated or durably accepted."
 related_decisions:
   - "GS-I3-ANONYMOUS-GET-ONLY"
   - "GS-I3-TWO-PASS-CONSISTENCY"
@@ -128,7 +132,43 @@ authority, host, user information, port, exact path, dot or percent-encoded
 bypass, query, fragment, and expected owner/repository/pull identity are checked
 before the accepted GS-I2 durable intake.
 
-The IDE Agent status for the CR2 implementations of `GS-I3-ANON-001` and
-`GS-I3-SHAPE-001` is `IMPLEMENTED_PENDING_INDEPENDENT_VERIFICATION`, not formally
-closed. CR2 remains pending Implementation Supervisor and High Assurance
-Independent Review. Push and merge remain unauthorized.
+At CR2 implementation freeze, the IDE Agent status for the attempted
+`GS-I3-ANON-001` and `GS-I3-SHAPE-001` corrections was
+`IMPLEMENTED_PENDING_INDEPENDENT_VERIFICATION`, not formal closure. Exact-candidate
+adversarial validation later superseded that provisional status and stopped CR2
+RED. Commit `eb06320257e233b76109c2244d0dff712dfd2ac4`, tree
+`dc24a00f56d0c2540f10405e0fdd07e70a6835c2`, directly descends from the merge,
+but it is rejected, unaccepted, unpushed, and unmerged history. Its final policy
+transport delegated `/repos/o/r/pulls/%31` after validating decoded `URL.path`,
+and its pagination parser accepted an `Other/Repository` pull-request link while
+acquiring `Harry5174/github-steward` pull request 1.
+
+## GS-I3-CR3 canonical transport and pagination identity binding
+
+CR3 is the single authorized local child correction of rejected CR2. One
+immutable adapter-owned endpoint model enumerates pull detail, pull files, pull
+commits, pull reviews, exact-head check suites, and latest exact-head check runs.
+The same parser validates the original input before HTTPX normalization, every
+absolute Link target, and the serialized `httpx.URL.raw_path` immediately before
+the real or fake transport is delegated. It rejects all percent-encoded path or
+query forms, non-ASCII targets, backslashes, ambiguous separators, dot or empty
+components, noncanonical case and ordering, duplicate or unknown query keys,
+missing invariants, bodies, credentials, and final endpoint substitution.
+
+For files, commits, reviews, and check runs, an omitted first page means page 1.
+Only an explicit successor page within the existing 100-page bound may continue.
+Owner, repository, pull number or exact head SHA, endpoint kind, canonical path,
+`per_page=100`, `filter=latest` where applicable, and the complete invariant key
+set are immutable across each link in the chain. Pull detail and check suites do
+not paginate. The accepted GS-I2 intake, RFC 8785 wrapper, synchronous HTTPX
+0.28.1 construction, redirect prohibition, strict review relationship, and
+check-suite completeness behavior remain unchanged.
+
+CR3 supersedes CR2 only as a local correction attempt. Its two subcorrections
+are `IMPLEMENTED_PENDING_SUPERVISOR_AND_INDEPENDENT_VERIFICATION` within the IDE
+Agent record. `GS-I3-ANON-001` and `GS-I3-SHAPE-001` remain formally reopened;
+`GS-I3-CHECK-001` remains closed with regression protection; and
+`GS-I3-EVID-001` remains open until exact-candidate evidence is independently
+verified. Implementation Supervisor review is pending, High Assurance
+Independent Review is not yet authorized, and push and merge remain
+unauthorized.
