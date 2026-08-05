@@ -98,7 +98,7 @@ deliverables:
   - "SPEC-0003, this separate-authority work record, bounded runtime implementation, exact linear migration, and deterministic local tests."
   - "One direct-descendant local candidate commit and self-contained verified Git bundle."
   - "Credential-redacted persistent implementation evidence, completion reports, file-hash manifest, fault matrix, PostgreSQL cleanup proof, and safe verified archive."
-implementation_state: implemented
+implementation_state: verified
 implementer:
   actor_id: "local-ide-agent-gs-i2"
   role: ide_agent
@@ -118,31 +118,101 @@ validation_summaries:
   - check: "Pinned AFEF v0.2.0 validator"
     result: passed
     summary: "The cleared-environment pinned validator exits zero with empty standard output and standard error and does not mutate the project."
-evidence_references: []
+  - check: "Historical GS-I2 candidate and checkpoint preservation"
+    result: passed
+    summary: >-
+      Original candidate 9e8d9818b38b82c461db63254e19b764a800bd08 is
+      SUPERSEDED_AFTER_SUPERVISOR_AMBER; CR1
+      e43dee263770bc0b6c9372fbe5a60c91e125bf9d closed GS-I2-IDEM-001 and
+      GS-I2-AFEF-001 and is the sole current accepted implementation candidate.
+      The retained original Supervisor pending entry reflects its historical
+      pre-review checkpoint rather than a current conclusion; the subsequent
+      AMBER disposition and CR1 correction remain visible without fabricating a
+      missing review record. The independent-review pending state, final_gate
+      not_issued state, and IDE-Agent handoff prohibition are also historical
+      pre-assurance checkpoints.
+  - check: "Current retrospective exact-candidate assurance"
+    result: passed
+    summary: >-
+      A new retrospective Implementation Supervisor GREEN was issued at
+      2026-08-05T12:42:37Z (record SHA-256
+      1e6800f6085a2ca118989ad3e8c65b5e6dbf636675c961776f5d858ce49fbc30)
+      and a new retrospective Independent Reviewer GREEN was issued at
+      2026-08-05T13:34:09Z (record SHA-256
+      6716b94ed49452b7aefd357e214dff4ae15249da15d8e5ef4738b6ba2d1dc091),
+      both for exact CR1 e43dee263770bc0b6c9372fbe5a60c91e125bf9d.
+      They are current assurance only; missing original GREEN records were not
+      recovered, recreated, or backdated.
+  - check: "Current Product Owner ratification and integration closeout"
+    result: passed
+    summary: >-
+      The Product Owner RATIFIED exact CR1
+      e43dee263770bc0b6c9372fbe5a60c91e125bf9d at
+      2026-08-05T14:14:54Z using current ratification record SHA-256
+      5fe3e8fc7729256893682973285f3f8b6881cf99a3ed190e599221dc39f14a13.
+      This is new current ratification, not historical acceptance or
+      retroactive authorization. Git integration is evidenced only by CR1 being
+      the second parent of PR 1 merge commit
+      8120a414e7b807a86d99f1d1bd35cdd06d72bb68, which is an ancestor of
+      current main. implementation=COMPLETE;
+      implementation_supervisor=GREEN_CURRENT_RETROSPECTIVE;
+      independent_review=GREEN_CURRENT_RETROSPECTIVE;
+      product_owner_ratification=RATIFIED_CURRENT; remote_integration=COMPLETE;
+      status=FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED. GS-I3 proceeded under
+      separate Product Owner authorization; no downstream or next-cycle
+      authority is created.
+evidence_references:
+  - "/home/harry/Desktop/prcx_01/xx_github/github-steward-evidence/GS-LC1/evidence-recovery-01/retrospective-implementation-supervisor-verification.yaml (SHA-256 1e6800f6085a2ca118989ad3e8c65b5e6dbf636675c961776f5d858ce49fbc30; current retrospective assurance, not an original historical record)."
+  - "/home/harry/Desktop/prcx_01/xx_github/github-steward-evidence/GS-LC1/evidence-recovery-01/retrospective-independent-reviewer-verification.yaml (SHA-256 6716b94ed49452b7aefd357e214dff4ae15249da15d8e5ef4738b6ba2d1dc091; current retrospective assurance, not an original historical record)."
+  - "/home/harry/Desktop/prcx_01/xx_github/github-steward-evidence/GS-LC1/evidence-recovery-01/product-owner-current-ratification.yaml (SHA-256 5fe3e8fc7729256893682973285f3f8b6881cf99a3ed190e599221dc39f14a13; new current ratification, not historical acceptance)."
 reviews:
   - review_id: "GS-I2-IMPLEMENTATION-SUPERVISOR"
     status: pending
     reviewer:
       actor_id: "github-steward-implementation-supervisor"
       role: implementation_supervisor
+  - review_id: "GS-I2-CR1-RETROSPECTIVE-IMPLEMENTATION-SUPERVISOR"
+    status: completed
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+    recommendation: accept
+    evidence_reference: >-
+      /home/harry/Desktop/prcx_01/xx_github/github-steward-evidence/GS-LC1/evidence-recovery-01/retrospective-implementation-supervisor-verification.yaml
+      (SHA-256
+      1e6800f6085a2ca118989ad3e8c65b5e6dbf636675c961776f5d858ce49fbc30);
+      current retrospective verification issued at 2026-08-05T12:42:37Z,
+      not the missing original Supervisor review.
 independent_review:
-  status: pending
+  status: accepted
   reviewer:
     actor_id: "github-steward-independent-reviewer"
     role: independent_reviewer
+  evidence_reference: ".afef/specifications/gs-i2-durable-local-processing.md"
+  reviewed_at: "2026-08-05T13:34:09Z"
 final_gate:
-  status: not_issued
+  status: accepted
   owner:
     actor_id: "github-steward-product-owner"
     role: product_owner
+  recorded_at: "2026-08-05T14:14:54Z"
 human_checkpoint:
-  status: awaiting
+  status: completed
   owner:
     actor_id: "github-steward-implementation-supervisor"
     role: implementation_supervisor
-  next_required_action: "Inspect the exact local GS-I2 candidate commit, bundle, and persistent evidence; the IDE Agent may not self-review, independently accept, publish, deploy, or issue the final gate."
+  next_required_action: >-
+    No GS-I2 lifecycle action remains after current ratification and verified
+    integration. GS-I3 was separately authorized; no next major cycle is
+    authorized.
 known_limitations:
   - "The synthetic boundary accepts decoded mappings only; raw JSON parsing and duplicate object-key detection remain deferred."
   - "GitHub and all remote or externally effectful behavior remain prohibited and unimplemented."
   - "Local disposable-database evidence is not a production database, operations, security, deployment, or readiness claim."
-next_action: "Return the exact candidate and persistent evidence to the GS-I2 Implementation Supervisor for independent inspection."
+  - "The IDE Agent's original authority excluded review, acceptance, and publication; current acceptance was issued only by the Product Owner's new ratification after role-separated retrospective assurance."
+  - "Original historical Supervisor GREEN, Independent Reviewer GREEN, Product Owner acceptance records, and exact historical acceptance timestamps were not found; current retrospective assurance and ratification do not recover, recreate, or backdate them."
+  - "Git ancestry establishes integration only. This closeout creates no tag, release, deployment, production-readiness claim, product write authority, retroactive authorization, or next-cycle authorization."
+next_action: >-
+  GS-I2 is currently ratified, integrated, and
+  FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED. No next major stage is authorized by
+  this record.

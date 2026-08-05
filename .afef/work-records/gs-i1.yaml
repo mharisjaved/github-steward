@@ -167,7 +167,7 @@ deliverables:
   - "One external evidence directory and candidate-and-evidence archive with SHA-256."
   - "One direct-descendant correction commit, a self-contained corrected bundle, and a credential-free mutable-phase database incident record."
   - "One further direct-descendant CR2 commit, a self-contained corrected bundle, and all final CR2 reports, archive, inherited incident record, and evidence in the persistent external evidence directory."
-implementation_state: implemented
+implementation_state: verified
 implementer:
   actor_id: "local-ide-agent-gs-i1"
   role: ide_agent
@@ -187,7 +187,52 @@ validation_summaries:
   - check: "Pinned AFEF v0.2.0 validator"
     result: passed
     summary: "The cleared-environment offline validator exited 0 with empty stdout and stderr."
-evidence_references: []
+  - check: "Historical GS-I1 candidate and checkpoint preservation"
+    result: passed
+    summary: >-
+      Original candidate 5ff1ffb481e118d8295b99b2255ee57bbfc3a6e2 is
+      SUPERSEDED; CR1 b9b9d8485ed68f426a6b3a1dea3ff65c55502b60 is
+      SUPERSEDED_AFTER_INDEPENDENT_AMBER after closing GS-I1-IMM-001,
+      GS-I1-LEASE-001, and GS-I1-EVID-001; CR2
+      c956a912ad8f541c7edb9ad20523a63f960d8e82 closed GS-I1-IR-001 and
+      GS-I1-IR-002 and is the sole current accepted implementation candidate.
+      The retained CR2 Supervisor pending entry, independent-review pending
+      state, final_gate not_issued state, and "do not begin GS-I2" instruction
+      are historical pre-assurance checkpoints, not current conclusions.
+  - check: "Current retrospective exact-candidate assurance"
+    result: passed
+    summary: >-
+      A new retrospective Implementation Supervisor GREEN was issued at
+      2026-08-05T12:42:37Z (record SHA-256
+      1e6800f6085a2ca118989ad3e8c65b5e6dbf636675c961776f5d858ce49fbc30)
+      and a new retrospective Independent Reviewer GREEN was issued at
+      2026-08-05T13:34:09Z (record SHA-256
+      6716b94ed49452b7aefd357e214dff4ae15249da15d8e5ef4738b6ba2d1dc091),
+      both for exact CR2 c956a912ad8f541c7edb9ad20523a63f960d8e82.
+      They are current assurance only; missing original GREEN records were not
+      recovered, recreated, or backdated.
+  - check: "Current Product Owner ratification and integration closeout"
+    result: passed
+    summary: >-
+      The Product Owner RATIFIED exact CR2
+      c956a912ad8f541c7edb9ad20523a63f960d8e82 at
+      2026-08-05T14:14:54Z using current ratification record SHA-256
+      5fe3e8fc7729256893682973285f3f8b6881cf99a3ed190e599221dc39f14a13.
+      This is new current ratification, not historical acceptance or
+      retroactive authorization. Git integration is evidenced only by CR2 being
+      an ancestor of PR 1 merge commit
+      8120a414e7b807a86d99f1d1bd35cdd06d72bb68, which is an ancestor of
+      current main. implementation=COMPLETE;
+      implementation_supervisor=GREEN_CURRENT_RETROSPECTIVE;
+      independent_review=GREEN_CURRENT_RETROSPECTIVE;
+      product_owner_ratification=RATIFIED_CURRENT; remote_integration=COMPLETE;
+      status=FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED. GS-I2 and GS-I3
+      proceeded under separate Product Owner authorizations; no downstream or
+      next-cycle authority is created.
+evidence_references:
+  - "/home/harry/Desktop/prcx_01/xx_github/github-steward-evidence/GS-LC1/evidence-recovery-01/retrospective-implementation-supervisor-verification.yaml (SHA-256 1e6800f6085a2ca118989ad3e8c65b5e6dbf636675c961776f5d858ce49fbc30; current retrospective assurance, not an original historical record)."
+  - "/home/harry/Desktop/prcx_01/xx_github/github-steward-evidence/GS-LC1/evidence-recovery-01/retrospective-independent-reviewer-verification.yaml (SHA-256 6716b94ed49452b7aefd357e214dff4ae15249da15d8e5ef4738b6ba2d1dc091; current retrospective assurance, not an original historical record)."
+  - "/home/harry/Desktop/prcx_01/xx_github/github-steward-evidence/GS-LC1/evidence-recovery-01/product-owner-current-ratification.yaml (SHA-256 5fe3e8fc7729256893682973285f3f8b6881cf99a3ed190e599221dc39f14a13; new current ratification, not historical acceptance)."
 reviews:
   - review_id: "GS-I1-IMPLEMENTATION-SUPERVISOR"
     status: completed
@@ -222,24 +267,47 @@ reviews:
     reviewer:
       actor_id: "github-steward-implementation-supervisor"
       role: implementation_supervisor
+  - review_id: "GS-I1-CR2-RETROSPECTIVE-IMPLEMENTATION-SUPERVISOR"
+    status: completed
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+    recommendation: accept
+    evidence_reference: >-
+      /home/harry/Desktop/prcx_01/xx_github/github-steward-evidence/GS-LC1/evidence-recovery-01/retrospective-implementation-supervisor-verification.yaml
+      (SHA-256
+      1e6800f6085a2ca118989ad3e8c65b5e6dbf636675c961776f5d858ce49fbc30);
+      current retrospective verification issued at 2026-08-05T12:42:37Z,
+      not the missing original Supervisor review.
 independent_review:
-  status: pending
+  status: accepted
   reviewer:
     actor_id: "github-steward-independent-reviewer"
     role: independent_reviewer
+  evidence_reference: ".afef/specifications/gs-i1-local-foundation.md"
+  reviewed_at: "2026-08-05T13:34:09Z"
 final_gate:
-  status: not_issued
+  status: accepted
   owner:
     actor_id: "github-steward-product-owner"
     role: product_owner
+  recorded_at: "2026-08-05T14:14:54Z"
 human_checkpoint:
-  status: awaiting
+  status: completed
   owner:
     actor_id: "github-steward-implementation-supervisor"
     role: implementation_supervisor
-  next_required_action: "Rereview the exact direct-descendant GS-I1-CR2 candidate and persistent corrected external evidence; the IDE Agent may not review or accept it."
+  next_required_action: >-
+    No GS-I1 lifecycle action remains after current ratification and verified
+    integration. GS-I2 and GS-I3 were separately authorized; no next major
+    cycle is authorized.
 known_limitations:
   - "Append-only repository interfaces and PostgreSQL triggers are established; production role-grant enforcement is deferred and not claimed."
   - "Alembic metadata drift checks are bounded and do not prove complete PostgreSQL schema equivalence."
   - "Raw-JSON duplicate-key ingress detection and every GitHub, write, operational, and production-readiness capability remain deferred and not claimed."
-next_action: "Provide the exact commit-bound GS-I1-CR2 candidate and persistent corrected external evidence to the Implementation Supervisor; do not begin self-review, another correction, independent review, acceptance, publication, or GS-I2."
+  - "Original historical Supervisor GREEN, Independent Reviewer GREEN, Product Owner acceptance records, and exact historical acceptance timestamps were not found; current retrospective assurance and ratification do not recover, recreate, or backdate them."
+  - "Git ancestry establishes integration only. This closeout creates no tag, release, deployment, production-readiness claim, product write authority, retroactive authorization, or next-cycle authorization."
+next_action: >-
+  GS-I1 is currently ratified, integrated, and
+  FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED. No next major stage is authorized by
+  this record.
