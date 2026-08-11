@@ -19,6 +19,7 @@ from github_steward.domain.errors import (
     DomainValidationError,
 )
 from github_steward.domain.processing import (
+    GITHUB_REFRESH_WORK_TYPE,
     IDENTITY_NAMESPACE,
     WORK_TYPE,
     AttemptState,
@@ -28,6 +29,8 @@ from github_steward.domain.processing import (
     analysis_view_id,
     audit_event_id,
     delivery_id,
+    github_work_record_id,
+    github_work_subject,
     lease_is_renewable,
     observation_version_id,
     pointer_ordering_key,
@@ -152,6 +155,24 @@ def test_exact_deterministic_uuid_derivations() -> None:
     event = audit_event_id(work, 2, "EVENT")
     assert event == str(uuid5(IDENTITY_NAMESPACE, f"audit:{work}:2:EVENT"))
     assert UUID(event).version == 5
+
+    github_work = github_work_record_id(delivery)
+    assert github_work == str(
+        uuid5(
+            IDENTITY_NAMESPACE,
+            f"work:{delivery}:{GITHUB_REFRESH_WORK_TYPE}",
+        )
+    )
+    assert github_work_subject(123, 7) == "123:7"
+
+
+@pytest.mark.parametrize(("repository_id", "pull_number"), [(True, 1), (1, 0)])
+def test_github_work_subject_rejects_nonpositive_or_boolean_identity(
+    repository_id: int,
+    pull_number: int,
+) -> None:
+    with pytest.raises(DomainValidationError):
+        github_work_subject(repository_id, pull_number)
 
 
 @settings(derandomize=True, max_examples=200, deadline=None)

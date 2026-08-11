@@ -20,6 +20,9 @@ from github_steward.adapters.postgres.metadata import (
     canonical_observation,
     current_observation_pointer,
     delivery_inbox,
+    preparedness_assessment,
+    preparedness_assessment_evidence,
+    preparedness_profile,
     work_attempt,
     work_record,
 )
@@ -80,6 +83,70 @@ def _insert_delivery(connection: Connection, suffix: str = "schema") -> UUID:
     return identifier
 
 
+def _insert_profile(connection: Connection) -> tuple[UUID, int]:
+    identifier = uuid4()
+    repository_id = uuid4().int % 9_000_000_000 + 1
+    connection.execute(
+        preparedness_profile.insert().values(
+            profile_id=identifier,
+            profile_version=1,
+            repository_id=repository_id,
+            effective_from=NOW,
+            schema_id="github-steward/preparedness-profile/v1",
+            canonical_payload={"profile_id": str(identifier), "version": 1},
+            digest_format="jcs-sha256/v1",
+            digest_value=DIGEST,
+        )
+    )
+    return identifier, repository_id
+
+
+def _insert_assessment(
+    connection: Connection,
+    observation_id: UUID,
+    *,
+    include_evidence: bool,
+) -> tuple[UUID, UUID]:
+    profile_id, repository_id = _insert_profile(connection)
+    view_id = _insert_analysis_view(connection)
+    connection.execute(
+        analysis_view_observation.insert().values(
+            analysis_view_id=view_id,
+            observation_version_id=observation_id,
+            facet_role_id="pull_request",
+        )
+    )
+    assessment_id = uuid4()
+    connection.execute(
+        preparedness_assessment.insert().values(
+            assessment_id=assessment_id,
+            repository_id=repository_id,
+            pull_number=17,
+            head_sha="a" * 40,
+            profile_id=profile_id,
+            profile_version=1,
+            analysis_view_id=view_id,
+            evidence_sealed_at=NOW,
+            evaluated_at=NOW,
+            verdict="READY_FOR_HUMAN_REVIEW",
+            schema_id="github-steward/preparedness-assessment/v1",
+            canonical_payload={"assessment_id": str(assessment_id)},
+            digest_format="jcs-sha256/v1",
+            digest_value=DIGEST,
+        )
+    )
+    if include_evidence:
+        connection.execute(
+            preparedness_assessment_evidence.insert().values(
+                assessment_id=assessment_id,
+                analysis_view_id=view_id,
+                observation_version_id=observation_id,
+                facet_role_id="pull_request",
+            )
+        )
+    return assessment_id, view_id
+
+
 def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
     postgres_engine: Engine,
 ) -> None:
@@ -128,6 +195,31 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
                 "canonical_observation",
                 "fk_analysis_view_observation_observation",
             ),
+            (
+                "preparedness_profile",
+                "preparedness_profile",
+                "fk_preparedness_profile_predecessor",
+            ),
+            (
+                "preparedness_assessment",
+                "preparedness_profile",
+                "fk_preparedness_assessment_profile",
+            ),
+            (
+                "preparedness_assessment",
+                "analysis_view",
+                "fk_preparedness_assessment_view",
+            ),
+            (
+                "preparedness_assessment_evidence",
+                "preparedness_assessment",
+                "fk_preparedness_assessment_evidence_assessment",
+            ),
+            (
+                "preparedness_assessment_evidence",
+                "analysis_view_observation",
+                "fk_preparedness_assessment_evidence_view_observation",
+            ),
         }
         trigger_rows = set(
             connection.execute(
@@ -164,9 +256,14 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
         constraint["name"]
         for constraint in inspector.get_check_constraints("work_record")
     } >= {
+        "ck_work_record_work_type_inventory",
         "ck_work_record_state_inventory",
         "ck_work_record_state_lease_consistency",
     }
+    assert {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("delivery_inbox")
+    } >= {"ck_delivery_inbox_provider_inventory"}
     assert {
         constraint["name"]
         for constraint in inspector.get_check_constraints("work_attempt")
@@ -232,6 +329,37 @@ def test_append_only_trigger_rejects_update_and_delete(
             predicate = f"{key_column} = %s"
             parameters = (identifier,)
             assignment = "digest_value = digest_value"
+        elif table_name == "preparedness_profile":
+            identifier, _ = _insert_profile(connection)
+            predicate = "profile_id = %s AND profile_version = %s"
+            parameters = (identifier, 1)
+            assignment = "digest_value = digest_value"
+        elif table_name == "preparedness_assessment":
+            identifier, _ = _insert_assessment(
+                connection,
+                observation_id,
+                include_evidence=False,
+            )
+            predicate = "assessment_id = %s"
+            parameters = (identifier,)
+            assignment = "digest_value = digest_value"
+        elif table_name == "preparedness_assessment_evidence":
+            identifier, view_id = _insert_assessment(
+                connection,
+                observation_id,
+                include_evidence=True,
+            )
+            predicate = (
+                "assessment_id = %s AND analysis_view_id = %s "
+                "AND observation_version_id = %s AND facet_role_id = %s"
+            )
+            parameters = (
+                identifier,
+                view_id,
+                observation_id,
+                "pull_request",
+            )
+            assignment = "facet_role_id = facet_role_id"
         else:
             identifier = observation_id
             key_column = "observation_version_id"
@@ -298,6 +426,28 @@ def test_pointer_composite_foreign_key_rejects_cross_entity_reference(
                     ordering_key={"sequence": "1"},
                     pointer_version=0,
                     updated_at=NOW,
+                )
+            )
+
+
+def test_assessment_evidence_must_belong_to_exact_analysis_view(
+    postgres_engine: Engine,
+) -> None:
+    with postgres_engine.begin() as connection:
+        included_observation = _insert_observation(connection)
+        assessment_id, view_id = _insert_assessment(
+            connection,
+            included_observation,
+            include_evidence=False,
+        )
+        unrelated_observation = _insert_observation(connection)
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                preparedness_assessment_evidence.insert().values(
+                    assessment_id=assessment_id,
+                    analysis_view_id=view_id,
+                    observation_version_id=unrelated_observation,
+                    facet_role_id="pull_request",
                 )
             )
 

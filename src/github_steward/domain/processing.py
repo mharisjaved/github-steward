@@ -20,6 +20,8 @@ from github_steward.domain.errors import DomainValidationError
 IDENTITY_NAMESPACE: Final = UUID("15200e7d-6747-5b89-bf26-870ce9894353")
 PROVIDER: Final = "synthetic"
 WORK_TYPE: Final = "PROCESS_SYNTHETIC_OBSERVATION"
+GITHUB_PROVIDER: Final = "github"
+GITHUB_REFRESH_WORK_TYPE: Final = "REFRESH_GITHUB_PULL_REQUEST"
 DELIVERY_SCHEMA_ID: Final = "github-steward.synthetic-delivery"
 OBSERVATION_SCHEMA_ID: Final = "github-steward.synthetic-observation"
 ANALYSIS_VIEW_SCHEMA_ID: Final = "github-steward.synthetic-analysis-view"
@@ -214,6 +216,25 @@ def work_record_id(delivery_identifier: str) -> str:
         uuid5(
             IDENTITY_NAMESPACE,
             f"work:{delivery_identifier}:{WORK_TYPE}",
+        )
+    )
+
+
+def github_work_subject(repository_id: int, pull_number: int) -> str:
+    """Return the numeric semantic subject for one GitHub refresh."""
+
+    repository = _bounded_integer(repository_id, "repository_id", minimum=1)
+    pull = _bounded_integer(pull_number, "pull_number", minimum=1)
+    return f"{repository}:{pull}"
+
+
+def github_work_record_id(delivery_identifier: str) -> str:
+    """Derive a GitHub refresh work identifier without route-name identity."""
+
+    return str(
+        uuid5(
+            IDENTITY_NAMESPACE,
+            f"work:{delivery_identifier}:{GITHUB_REFRESH_WORK_TYPE}",
         )
     )
 

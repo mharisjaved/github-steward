@@ -5,6 +5,15 @@ from __future__ import annotations
 import pytest
 
 from github_steward.domain.acquisition import (
+    API_VERSION,
+    COHERENT_ATTEMPTS,
+    MAX_CHECK_RUNS,
+    MAX_CHECK_SUITES,
+    MAX_COMMITS,
+    MAX_FILES,
+    MAX_PAGES,
+    MAX_RESPONSE_BYTES,
+    PER_PAGE,
     AcquisitionError,
     AcquisitionOutcome,
     RepositoryTarget,
@@ -20,6 +29,20 @@ def test_repository_target_and_delivery_identity() -> None:
     digest = "a" * 64
     assert poll_delivery_identity(77, 1, digest) == f"github-public-pr:77:1:{digest}"
     assert require_sha("b" * 40, "head") == "b" * 40
+
+
+def test_exact_github_acquisition_configuration_ceiling() -> None:
+    assert (
+        API_VERSION,
+        PER_PAGE,
+        MAX_PAGES,
+        MAX_RESPONSE_BYTES,
+        MAX_FILES,
+        MAX_COMMITS,
+        MAX_CHECK_SUITES,
+        MAX_CHECK_RUNS,
+        COHERENT_ATTEMPTS,
+    ) == ("2026-03-10", 100, 100, 8_388_608, 3_000, 250, 1_000, 1_000, 2)
 
 
 @pytest.mark.parametrize(

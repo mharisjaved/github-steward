@@ -40,6 +40,7 @@ safety_boundaries:
   - "GS-I2 is bounded to accepted parent c956a912ad8f541c7edb9ad20523a63f960d8e82, one local branch, one direct-descendant candidate commit, the exact affected-path allowlist, and exact-pattern disposable local PostgreSQL databases."
   - "GS-I2 accepts only decoded synthetic mappings and adds deterministic local processing and recovery; raw JSON authority, GitHub access, remote Git, external queues, asynchronous persistence, execution work, deployment, publication, and production-readiness claims remain prohibited."
   - "GS-I3 permits only bounded anonymous GET requests to public api.github.com pull-request resources, followed by strict validation and the existing GS-I2 durable intake; Authorization, issue comments, mutation methods, private access, push, publication, deployment, and production-readiness claims remain prohibited."
+  - "GS-I4 permits only recorded/fake coherent evidence, deterministic preparedness, the existing current-pointer architecture, exactly three new immutable tables, disposable local PostgreSQL, and one local candidate/evidence package; live GitHub access, GH_TOKEN, authentication, mutation, deployment, dependency changes, and integration remain prohibited."
 ownership:
   project_owner:
     actor_id: "github-steward-product-owner"

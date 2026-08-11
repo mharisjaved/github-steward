@@ -28,6 +28,12 @@ from github_steward.ports.persistence import (
     DeliveryIngressResult,
     InboxWorkRepository,
     ObservationVersionId,
+    PreparednessAssessmentId,
+    PreparednessAssessmentRecord,
+    PreparednessAssessmentRepository,
+    PreparednessProfileId,
+    PreparednessProfileRecord,
+    PreparednessProfileRepository,
     UnitOfWork,
     WorkLeaseRepository,
     WorkProcessingRepository,
@@ -36,7 +42,12 @@ from github_steward.ports.persistence import (
 
 NOW = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
 type ImmutableRecord = (
-    Delivery | CanonicalObservationRecord | AnalysisViewRecord | AuditEventRecord
+    Delivery
+    | CanonicalObservationRecord
+    | AnalysisViewRecord
+    | PreparednessProfileRecord
+    | PreparednessAssessmentRecord
+    | AuditEventRecord
 )
 
 
@@ -51,6 +62,12 @@ def _public_methods(protocol: type[object]) -> set[str]:
 def test_append_only_ports_expose_no_update_or_delete() -> None:
     assert _public_methods(CanonicalObservationRepository) == {"append"}
     assert _public_methods(AnalysisViewRepository) == {"insert"}
+    assert _public_methods(PreparednessProfileRepository) == {
+        "get",
+        "get_successor",
+        "insert",
+    }
+    assert _public_methods(PreparednessAssessmentRepository) == {"insert"}
     assert _public_methods(AuditEventRepository) == {"append"}
 
 
@@ -58,6 +75,7 @@ def test_mutable_ports_are_explicitly_cas_and_lease_oriented() -> None:
     assert _public_methods(CurrentObservationPointerRepository) == {
         "compare_and_swap",
         "create_if_absent",
+        "get",
     }
     assert _public_methods(WorkLeaseRepository) == {"acquire", "release"}
     assert _public_methods(WorkProcessingRepository) == {
@@ -75,6 +93,8 @@ def test_immutable_port_records_are_frozen_values() -> None:
     for record in (
         CanonicalObservationRecord,
         AnalysisViewRecord,
+        PreparednessProfileRecord,
+        PreparednessAssessmentRecord,
         AuditEventRecord,
         Delivery,
     ):
@@ -115,6 +135,33 @@ def test_immutable_port_records_are_frozen_values() -> None:
                 ("pull_request", ObservationVersionId("observation-1")),
             ),
         ),
+        PreparednessProfileRecord(
+            profile_id=PreparednessProfileId("profile-1"),
+            version=1,
+            repository_id=1,
+            effective_from=NOW,
+            predecessor_profile_id=None,
+            predecessor_profile_version=None,
+            payload={"items": [{"value": 1}]},
+            digest=Digest("1" * 64),
+        ),
+        PreparednessAssessmentRecord(
+            assessment_id=PreparednessAssessmentId("assessment-1"),
+            repository_id=1,
+            pull_number=17,
+            head_sha="a" * 40,
+            profile_id=PreparednessProfileId("profile-1"),
+            profile_version=1,
+            analysis_view_id=AnalysisViewId("view-1"),
+            evidence_sealed_at=NOW,
+            evaluated_at=NOW,
+            verdict="READY_FOR_HUMAN_REVIEW",
+            payload={"items": [{"value": 1}]},
+            digest=Digest("2" * 64),
+            evidence_observations=(
+                ("pull_request", ObservationVersionId("observation-1")),
+            ),
+        ),
         AuditEventRecord(
             event_id=AuditEventId("event-1"),
             event_kind="observation.recorded",
@@ -126,7 +173,14 @@ def test_immutable_port_records_are_frozen_values() -> None:
             digest=Digest("c" * 64),
         ),
     ],
-    ids=["delivery", "canonical-observation", "analysis-view", "audit-event"],
+    ids=[
+        "delivery",
+        "canonical-observation",
+        "analysis-view",
+        "preparedness-profile",
+        "preparedness-assessment",
+        "audit-event",
+    ],
 )
 def test_immutable_port_record_payloads_reject_nested_mutation(
     record: ImmutableRecord,
@@ -174,6 +228,31 @@ def test_immutable_port_record_payloads_reject_nested_mutation(
             digest=Digest("e" * 64),
             observation_versions=(),
         ),
+        lambda payload: PreparednessProfileRecord(
+            profile_id=PreparednessProfileId("profile-2"),
+            version=1,
+            repository_id=2,
+            effective_from=NOW,
+            predecessor_profile_id=None,
+            predecessor_profile_version=None,
+            payload=payload,
+            digest=Digest("1" * 64),
+        ),
+        lambda payload: PreparednessAssessmentRecord(
+            assessment_id=PreparednessAssessmentId("assessment-2"),
+            repository_id=2,
+            pull_number=18,
+            head_sha="b" * 40,
+            profile_id=PreparednessProfileId("profile-2"),
+            profile_version=1,
+            analysis_view_id=AnalysisViewId("view-2"),
+            evidence_sealed_at=NOW,
+            evaluated_at=NOW,
+            verdict="INDETERMINATE",
+            payload=payload,
+            digest=Digest("2" * 64),
+            evidence_observations=(),
+        ),
         lambda payload: AuditEventRecord(
             event_id=AuditEventId("event-2"),
             event_kind="observation.recorded",
@@ -185,7 +264,14 @@ def test_immutable_port_record_payloads_reject_nested_mutation(
             digest=Digest("f" * 64),
         ),
     ],
-    ids=["delivery", "canonical-observation", "analysis-view", "audit-event"],
+    ids=[
+        "delivery",
+        "canonical-observation",
+        "analysis-view",
+        "preparedness-profile",
+        "preparedness-assessment",
+        "audit-event",
+    ],
 )
 def test_immutable_port_records_copy_caller_owned_payload(
     record_factory: Callable[[object], ImmutableRecord],
@@ -225,6 +311,8 @@ def test_repositories_never_expose_transaction_control() -> None:
         WorkLeaseRepository,
         WorkProcessingRepository,
         AnalysisViewRepository,
+        PreparednessProfileRepository,
+        PreparednessAssessmentRepository,
         AuditEventRepository,
     )
     for repository in repositories:

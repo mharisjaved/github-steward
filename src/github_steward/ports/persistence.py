@@ -21,6 +21,8 @@ WorkAttemptId = NewType("WorkAttemptId", str)
 ObservationVersionId = NewType("ObservationVersionId", str)
 AnalysisViewId = NewType("AnalysisViewId", str)
 AuditEventId = NewType("AuditEventId", str)
+PreparednessProfileId = NewType("PreparednessProfileId", str)
+PreparednessAssessmentId = NewType("PreparednessAssessmentId", str)
 LeaseToken = NewType("LeaseToken", str)
 
 
@@ -172,6 +174,103 @@ class AnalysisViewRecord:
 
 
 @dataclass(frozen=True, slots=True, init=False)
+class PreparednessProfileRecord:
+    """An immutable, explicitly versioned preparedness profile."""
+
+    profile_id: PreparednessProfileId
+    version: int
+    repository_id: int
+    effective_from: datetime
+    predecessor_profile_id: PreparednessProfileId | None
+    predecessor_profile_version: int | None
+    payload: CanonicalValue
+    digest: Digest
+
+    def __init__(
+        self,
+        *,
+        profile_id: PreparednessProfileId,
+        version: int,
+        repository_id: int,
+        effective_from: datetime,
+        predecessor_profile_id: PreparednessProfileId | None,
+        predecessor_profile_version: int | None,
+        payload: object,
+        digest: Digest,
+    ) -> None:
+        object.__setattr__(self, "profile_id", profile_id)
+        object.__setattr__(self, "version", version)
+        object.__setattr__(self, "repository_id", repository_id)
+        object.__setattr__(self, "effective_from", effective_from)
+        object.__setattr__(
+            self,
+            "predecessor_profile_id",
+            predecessor_profile_id,
+        )
+        object.__setattr__(
+            self,
+            "predecessor_profile_version",
+            predecessor_profile_version,
+        )
+        object.__setattr__(self, "payload", freeze_canonical_value(payload))
+        object.__setattr__(self, "digest", digest)
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class PreparednessAssessmentRecord:
+    """An immutable assessment bound to exact profile and evidence versions."""
+
+    assessment_id: PreparednessAssessmentId
+    repository_id: int
+    pull_number: int
+    head_sha: str
+    profile_id: PreparednessProfileId
+    profile_version: int
+    analysis_view_id: AnalysisViewId
+    evidence_sealed_at: datetime
+    evaluated_at: datetime
+    verdict: str
+    payload: CanonicalValue
+    digest: Digest
+    evidence_observations: tuple[tuple[str, ObservationVersionId], ...]
+
+    def __init__(
+        self,
+        *,
+        assessment_id: PreparednessAssessmentId,
+        repository_id: int,
+        pull_number: int,
+        head_sha: str,
+        profile_id: PreparednessProfileId,
+        profile_version: int,
+        analysis_view_id: AnalysisViewId,
+        evidence_sealed_at: datetime,
+        evaluated_at: datetime,
+        verdict: str,
+        payload: object,
+        digest: Digest,
+        evidence_observations: tuple[tuple[str, ObservationVersionId], ...],
+    ) -> None:
+        object.__setattr__(self, "assessment_id", assessment_id)
+        object.__setattr__(self, "repository_id", repository_id)
+        object.__setattr__(self, "pull_number", pull_number)
+        object.__setattr__(self, "head_sha", head_sha)
+        object.__setattr__(self, "profile_id", profile_id)
+        object.__setattr__(self, "profile_version", profile_version)
+        object.__setattr__(self, "analysis_view_id", analysis_view_id)
+        object.__setattr__(self, "evidence_sealed_at", evidence_sealed_at)
+        object.__setattr__(self, "evaluated_at", evaluated_at)
+        object.__setattr__(self, "verdict", verdict)
+        object.__setattr__(self, "payload", freeze_canonical_value(payload))
+        object.__setattr__(self, "digest", digest)
+        object.__setattr__(
+            self,
+            "evidence_observations",
+            evidence_observations,
+        )
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class AuditEventRecord:
     """An append-only audit event without a cryptographic-chain claim."""
 
@@ -318,6 +417,9 @@ class CurrentObservationPointerRepository(Protocol):
     ) -> PointerCreateOutcome:
         """Create version zero only when no entity pointer exists."""
 
+    def get(self, *, entity_kind: str, entity_id: str) -> ObservationPointer | None:
+        """Load the exact current pointer for source-order comparison."""
+
     def compare_and_swap(
         self,
         *,
@@ -397,6 +499,36 @@ class AnalysisViewRepository(Protocol):
         """Insert a view and immutable associations without update/delete."""
 
 
+class PreparednessProfileRepository(Protocol):
+    """Immutable profile storage with exact-identity lookup only."""
+
+    def get(
+        self,
+        *,
+        profile_id: PreparednessProfileId,
+        version: int,
+    ) -> PreparednessProfileRecord | None:
+        """Load one explicit profile identity; never infer a current profile."""
+
+    def get_successor(
+        self,
+        *,
+        profile_id: PreparednessProfileId,
+        version: int,
+    ) -> PreparednessProfileRecord | None:
+        """Load the unique successor of one explicit predecessor identity."""
+
+    def insert(self, profile: PreparednessProfileRecord) -> None:
+        """Insert a root or exact linear successor profile."""
+
+
+class PreparednessAssessmentRepository(Protocol):
+    """Immutable assessment and explicit evidence-association storage."""
+
+    def insert(self, assessment: PreparednessAssessmentRecord) -> None:
+        """Insert one assessment and its exact analysis-view evidence links."""
+
+
 class AuditEventRepository(Protocol):
     """Append-only audit-event storage."""
 
@@ -451,6 +583,14 @@ class ProcessingUnitOfWork(UnitOfWork, Protocol):
     @property
     def audits(self) -> AuditEventRepository:
         """Return the transaction-bound audit repository."""
+
+    @property
+    def profiles(self) -> PreparednessProfileRepository:
+        """Return exact-identity immutable profile storage."""
+
+    @property
+    def assessments(self) -> PreparednessAssessmentRepository:
+        """Return immutable assessment and evidence storage."""
 
 
 class ProcessingUnitOfWorkFactory(Protocol):

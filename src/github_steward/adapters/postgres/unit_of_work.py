@@ -14,6 +14,8 @@ from github_steward.adapters.postgres.repositories import (
     PostgresCanonicalObservationRepository,
     PostgresCurrentObservationPointerRepository,
     PostgresInboxWorkRepository,
+    PostgresPreparednessAssessmentRepository,
+    PostgresPreparednessProfileRepository,
     PostgresWorkRepository,
 )
 
@@ -27,6 +29,8 @@ class PostgresUnitOfWork:
     pointers: PostgresCurrentObservationPointerRepository
     views: PostgresAnalysisViewRepository
     audits: PostgresAuditEventRepository
+    profiles: PostgresPreparednessProfileRepository
+    assessments: PostgresPreparednessAssessmentRepository
 
     def __init__(
         self,
@@ -58,6 +62,8 @@ class PostgresUnitOfWork:
         )
         self.views = PostgresAnalysisViewRepository(connection, self._fault_injector)
         self.audits = PostgresAuditEventRepository(connection, self._fault_injector)
+        self.profiles = PostgresPreparednessProfileRepository(connection)
+        self.assessments = PostgresPreparednessAssessmentRepository(connection)
         return self
 
     def __exit__(

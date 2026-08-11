@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -12,12 +13,19 @@ from sqlalchemy.engine import Engine
 
 from github_steward.adapters.canonicalization.rfc8785 import envelope_payload
 from github_steward.adapters.postgres.metadata import (
+    analysis_view,
+    analysis_view_observation,
+    canonical_observation,
     delivery_inbox,
+    preparedness_assessment,
+    preparedness_assessment_evidence,
+    preparedness_profile,
     work_attempt,
     work_record,
 )
 from github_steward.adapters.postgres.unit_of_work import PostgresUnitOfWork
 from github_steward.application.local_processing import SyntheticReceiptService
+from github_steward.domain.canonical import Digest
 from github_steward.domain.processing import (
     DELIVERY_SCHEMA_ID,
     PROVIDER,
@@ -29,6 +37,9 @@ from github_steward.domain.processing import (
     WorkState,
 )
 from github_steward.ports.persistence import (
+    AnalysisViewId,
+    AnalysisViewRecord,
+    CanonicalObservationRecord,
     ClaimOutcome,
     Delivery,
     DeliveryIngressOutcome,
@@ -36,6 +47,11 @@ from github_steward.ports.persistence import (
     LeaseToken,
     ObservationPointer,
     ObservationVersionId,
+    PointerCreateOutcome,
+    PreparednessAssessmentId,
+    PreparednessAssessmentRecord,
+    PreparednessProfileId,
+    PreparednessProfileRecord,
     WorkLease,
     WorkRecord,
     WorkRecordId,
@@ -623,3 +639,252 @@ def test_reconciliation_fails_closed_for_processing_work_without_attempt(
     ):
         unit.work.reconcile_expired(now=NOW)
         unit.commit()
+
+
+def test_pointer_can_be_loaded_for_exact_comparison(
+    postgres_engine: Engine,
+) -> None:
+    observation_id = ObservationVersionId("00000000-0000-0000-0000-000000000060")
+    pointer = ObservationPointer(
+        entity_kind="github_pull_request",
+        entity_id="1:17",
+        observation_version_id=observation_id,
+        ordering_key={"head_sha": "a" * 40},
+        pointer_version=0,
+        updated_at=NOW,
+    )
+    with factory(postgres_engine)() as unit:
+        assert (
+            unit.pointers.get(
+                entity_kind=pointer.entity_kind,
+                entity_id=pointer.entity_id,
+            )
+            is None
+        )
+        unit.observations.append(
+            CanonicalObservationRecord(
+                version_id=observation_id,
+                entity_kind=pointer.entity_kind,
+                entity_id=pointer.entity_id,
+                schema_id="github-steward/coherent-analysis-view/v1",
+                schema_version=1,
+                observed_at=NOW,
+                payload={"head_sha": "a" * 40},
+                digest=Digest("6" * 64),
+            )
+        )
+        assert unit.pointers.create_if_absent(pointer) is PointerCreateOutcome.CREATED
+        assert (
+            unit.pointers.get(
+                entity_kind=pointer.entity_kind,
+                entity_id=pointer.entity_id,
+            )
+            == pointer
+        )
+        unit.commit()
+
+
+def test_profile_and_assessment_are_immutable_and_explicitly_linked(
+    postgres_engine: Engine,
+) -> None:
+    profile_id = PreparednessProfileId("00000000-0000-0000-0000-000000000070")
+    observation_id = ObservationVersionId("00000000-0000-0000-0000-000000000071")
+    view_id = AnalysisViewId("00000000-0000-0000-0000-000000000072")
+    assessment_id = PreparednessAssessmentId("00000000-0000-0000-0000-000000000073")
+    root = PreparednessProfileRecord(
+        profile_id=profile_id,
+        version=1,
+        repository_id=5174,
+        effective_from=NOW,
+        predecessor_profile_id=None,
+        predecessor_profile_version=None,
+        payload={"profile_id": profile_id, "version": 1},
+        digest=Digest("7" * 64),
+    )
+    successor = PreparednessProfileRecord(
+        profile_id=profile_id,
+        version=2,
+        repository_id=5174,
+        effective_from=NOW + timedelta(seconds=1),
+        predecessor_profile_id=profile_id,
+        predecessor_profile_version=1,
+        payload={"profile_id": profile_id, "version": 2},
+        digest=Digest("8" * 64),
+    )
+    assessment = PreparednessAssessmentRecord(
+        assessment_id=assessment_id,
+        repository_id=5174,
+        pull_number=17,
+        head_sha="a" * 40,
+        profile_id=profile_id,
+        profile_version=1,
+        analysis_view_id=view_id,
+        evidence_sealed_at=NOW,
+        evaluated_at=NOW,
+        verdict="READY_FOR_HUMAN_REVIEW",
+        payload={"assessment_id": assessment_id, "verdict": "READY"},
+        digest=Digest("9" * 64),
+        evidence_observations=(("pull_request", observation_id),),
+    )
+    observation = CanonicalObservationRecord(
+        version_id=observation_id,
+        entity_kind="github_pull_request",
+        entity_id="5174:17",
+        schema_id="github-steward/github-evidence/v1",
+        schema_version=1,
+        observed_at=NOW,
+        payload={"head_sha": "a" * 40},
+        digest=Digest("a" * 64),
+    )
+    view = AnalysisViewRecord(
+        view_id=view_id,
+        schema_id="github-steward/coherent-analysis-view/v1",
+        schema_version=1,
+        payload={"evidence_sealed_at": "2026-07-31T12:00:00.123456Z"},
+        digest=Digest("b" * 64),
+        observation_versions=(("pull_request", observation_id),),
+    )
+
+    with factory(postgres_engine)() as unit:
+        assert unit.profiles.get(profile_id=profile_id, version=1) is None
+        assert unit.profiles.get_successor(profile_id=profile_id, version=1) is None
+        unit.profiles.insert(root)
+        assert unit.profiles.get(profile_id=profile_id, version=1) == root
+        unit.profiles.insert(successor)
+        assert (
+            unit.profiles.get_successor(profile_id=profile_id, version=1) == successor
+        )
+        unit.observations.append(observation)
+        unit.views.insert(view)
+        unit.assessments.insert(assessment)
+        unit.commit()
+
+    with factory(postgres_engine)() as unit:
+        unit.observations.append(observation)
+        unit.views.insert(view)
+        unit.assessments.insert(assessment)
+        unit.commit()
+
+    with (
+        pytest.raises(ValueError, match="different immutable content"),
+        factory(postgres_engine)() as unit,
+    ):
+        unit.observations.append(replace(observation, digest=Digest("c" * 64)))
+
+    with postgres_engine.connect() as connection:
+        profile_count = connection.scalar(
+            sa.select(sa.func.count()).select_from(preparedness_profile)
+        )
+        assert profile_count is not None
+        assert profile_count >= 2
+        assert (
+            connection.scalar(
+                sa.select(sa.func.count())
+                .select_from(canonical_observation)
+                .where(canonical_observation.c.observation_version_id == observation_id)
+            )
+            == 1
+        )
+        assert (
+            connection.scalar(
+                sa.select(sa.func.count())
+                .select_from(analysis_view)
+                .where(analysis_view.c.analysis_view_id == view_id)
+            )
+            == 1
+        )
+        assert (
+            connection.scalar(
+                sa.select(sa.func.count())
+                .select_from(analysis_view_observation)
+                .where(analysis_view_observation.c.analysis_view_id == view_id)
+            )
+            == 1
+        )
+        assert (
+            connection.scalar(
+                sa.select(preparedness_assessment.c.profile_version).where(
+                    preparedness_assessment.c.assessment_id == assessment_id
+                )
+            )
+            == 1
+        )
+        assert (
+            connection.scalar(
+                sa.select(preparedness_assessment_evidence.c.facet_role_id).where(
+                    preparedness_assessment_evidence.c.assessment_id == assessment_id
+                )
+            )
+            == "pull_request"
+        )
+
+
+def test_profile_successor_validation_fails_closed(
+    postgres_engine: Engine,
+) -> None:
+    profile_id = PreparednessProfileId("00000000-0000-0000-0000-000000000080")
+    root = PreparednessProfileRecord(
+        profile_id=profile_id,
+        version=1,
+        repository_id=5180,
+        effective_from=NOW,
+        predecessor_profile_id=None,
+        predecessor_profile_version=None,
+        payload={"version": 1},
+        digest=Digest("c" * 64),
+    )
+    with factory(postgres_engine)() as unit:
+        unit.profiles.insert(root)
+        with pytest.raises(ValueError, match="all-or-none"):
+            unit.profiles.insert(
+                PreparednessProfileRecord(
+                    profile_id=profile_id,
+                    version=2,
+                    repository_id=5180,
+                    effective_from=NOW + timedelta(seconds=1),
+                    predecessor_profile_id=profile_id,
+                    predecessor_profile_version=None,
+                    payload={"version": 2},
+                    digest=Digest("d" * 64),
+                )
+            )
+        with pytest.raises(ValueError, match="does not exist"):
+            unit.profiles.insert(
+                PreparednessProfileRecord(
+                    profile_id=profile_id,
+                    version=3,
+                    repository_id=5180,
+                    effective_from=NOW + timedelta(seconds=2),
+                    predecessor_profile_id=profile_id,
+                    predecessor_profile_version=2,
+                    payload={"version": 3},
+                    digest=Digest("e" * 64),
+                )
+            )
+        with pytest.raises(ValueError, match="repository differs"):
+            unit.profiles.insert(
+                PreparednessProfileRecord(
+                    profile_id=profile_id,
+                    version=2,
+                    repository_id=5181,
+                    effective_from=NOW + timedelta(seconds=1),
+                    predecessor_profile_id=profile_id,
+                    predecessor_profile_version=1,
+                    payload={"version": 2},
+                    digest=Digest("f" * 64),
+                )
+            )
+        with pytest.raises(ValueError, match="effective later"):
+            unit.profiles.insert(
+                PreparednessProfileRecord(
+                    profile_id=profile_id,
+                    version=2,
+                    repository_id=5180,
+                    effective_from=NOW,
+                    predecessor_profile_id=profile_id,
+                    predecessor_profile_version=1,
+                    payload={"version": 2},
+                    digest=Digest("0" * 64),
+                )
+            )
+        unit.rollback()

@@ -70,9 +70,9 @@ def test_only_clock_infrastructure_reads_wall_clock() -> None:
     assert implicit_readers == {"infrastructure/clock.py"}
 
 
-def test_exactly_eight_core_tables_and_no_orm() -> None:
+def test_exactly_eleven_core_tables_and_no_orm() -> None:
     assert tuple(metadata.tables) == TABLE_NAMES
-    assert len(metadata.tables) == 8
+    assert len(metadata.tables) == 11
     source_text = "\n".join(path.read_text() for path in SRC.rglob("*.py"))
     for prohibited in (
         "DeclarativeBase",
@@ -85,13 +85,16 @@ def test_exactly_eight_core_tables_and_no_orm() -> None:
         assert prohibited not in source_text
 
 
-def test_exactly_five_append_only_targets() -> None:
+def test_exactly_eight_append_only_targets() -> None:
     assert APPEND_ONLY_TABLE_NAMES == (
         "delivery_inbox",
         "canonical_observation",
         "analysis_view",
         "analysis_view_observation",
         "audit_event",
+        "preparedness_profile",
+        "preparedness_assessment",
+        "preparedness_assessment_evidence",
     )
     assert set(APPEND_ONLY_TABLE_NAMES) <= set(TABLE_NAMES)
 
@@ -123,11 +126,12 @@ def test_application_imports_only_domain_and_ports_with_no_remote_technology() -
     }
 
 
-def test_exactly_two_linear_alembic_revisions() -> None:
+def test_exactly_three_linear_alembic_revisions() -> None:
     revision_files = sorted((ROOT / "migrations" / "versions").glob("*.py"))
     assert [path.name for path in revision_files] == [
         "0001_gs_i1_foundation.py",
         "0002_gs_i2_durable_processing.py",
+        "0003_gs_i4_preparedness.py",
     ]
     identities = []
     for path in revision_files:
@@ -147,6 +151,7 @@ def test_exactly_two_linear_alembic_revisions() -> None:
     assert identities == [
         ("gs_i1_0001", "None"),
         ("gs_i2_0002", '"gs_i1_0001"'),
+        ("gs_i4_0003", '"gs_i2_0002"'),
     ]
 
 

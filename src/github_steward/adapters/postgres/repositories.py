@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from datetime import datetime, timedelta
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa
@@ -17,6 +18,9 @@ from github_steward.adapters.postgres.metadata import (
     canonical_observation,
     current_observation_pointer,
     delivery_inbox,
+    preparedness_assessment,
+    preparedness_assessment_evidence,
+    preparedness_profile,
     work_attempt,
     work_record,
 )
@@ -47,7 +51,11 @@ from github_steward.ports.persistence import (
     LeaseOperationResult,
     LeaseToken,
     ObservationPointer,
+    ObservationVersionId,
     PointerCreateOutcome,
+    PreparednessAssessmentRecord,
+    PreparednessProfileId,
+    PreparednessProfileRecord,
     ReconciliationResult,
     WorkAttemptId,
     WorkLease,
@@ -64,6 +72,15 @@ def _no_fault(_: FaultPoint) -> None:
 
 def _uuid(value: str) -> UUID:
     return UUID(value)
+
+
+def _require_exact_replay(
+    existing: Mapping[str, object],
+    expected: Mapping[str, object],
+    label: str,
+) -> None:
+    if any(existing[key] != value for key, value in expected.items()):
+        raise ValueError(f"{label} identity collided with different immutable content")
 
 
 class PostgresInboxWorkRepository:
@@ -584,19 +601,42 @@ class PostgresCanonicalObservationRepository:
         self._fault = fault_injector or _no_fault
 
     def append(self, observation: CanonicalObservationRecord) -> None:
-        self._connection.execute(
-            canonical_observation.insert().values(
-                observation_version_id=_uuid(observation.version_id),
-                entity_kind=observation.entity_kind,
-                entity_id=observation.entity_id,
-                schema_id=observation.schema_id,
-                schema_version=observation.schema_version,
-                observed_at=observation.observed_at,
-                canonical_payload=to_json_compatible(observation.payload),
-                digest_format=observation.digest.format,
-                digest_value=observation.digest.value,
+        values: dict[str, object] = {
+            "observation_version_id": _uuid(observation.version_id),
+            "entity_kind": observation.entity_kind,
+            "entity_id": observation.entity_id,
+            "schema_id": observation.schema_id,
+            "schema_version": observation.schema_version,
+            "observed_at": observation.observed_at,
+            "canonical_payload": to_json_compatible(observation.payload),
+            "digest_format": observation.digest.format,
+            "digest_value": observation.digest.value,
+        }
+        inserted = self._connection.execute(
+            pg_insert(canonical_observation)
+            .values(**values)
+            .on_conflict_do_nothing(
+                index_elements=[canonical_observation.c.observation_version_id]
             )
-        )
+            .returning(canonical_observation.c.observation_version_id)
+        ).scalar_one_or_none()
+        if inserted is None:
+            existing = (
+                self._connection.execute(
+                    sa.select(canonical_observation).where(
+                        canonical_observation.c.observation_version_id
+                        == values["observation_version_id"]
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            _require_exact_replay(
+                cast(Mapping[str, object], existing),
+                values,
+                "canonical observation",
+            )
+            return
         self._fault(FaultPoint.AFTER_OBSERVATION_INSERT)
 
 
@@ -630,6 +670,30 @@ class PostgresCurrentObservationPointerRepository:
         if inserted is None:
             return PointerCreateOutcome.CONFLICT
         return PointerCreateOutcome.CREATED
+
+    def get(self, *, entity_kind: str, entity_id: str) -> ObservationPointer | None:
+        row = (
+            self._connection.execute(
+                sa.select(current_observation_pointer).where(
+                    current_observation_pointer.c.entity_kind == entity_kind,
+                    current_observation_pointer.c.entity_id == entity_id,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            return None
+        return ObservationPointer(
+            entity_kind=str(row["entity_kind"]),
+            entity_id=str(row["entity_id"]),
+            observation_version_id=ObservationVersionId(
+                str(row["observation_version_id"])
+            ),
+            ordering_key=row["ordering_key"],
+            pointer_version=int(row["pointer_version"]),
+            updated_at=row["updated_at"],
+        )
 
     def compare_and_swap(
         self,
@@ -675,16 +739,53 @@ class PostgresAnalysisViewRepository:
         self._fault = fault_injector or _no_fault
 
     def insert(self, view: AnalysisViewRecord) -> None:
-        self._connection.execute(
-            analysis_view.insert().values(
-                analysis_view_id=_uuid(view.view_id),
-                schema_id=view.schema_id,
-                schema_version=view.schema_version,
-                canonical_payload=to_json_compatible(view.payload),
-                digest_format=view.digest.format,
-                digest_value=view.digest.value,
+        values: dict[str, object] = {
+            "analysis_view_id": _uuid(view.view_id),
+            "schema_id": view.schema_id,
+            "schema_version": view.schema_version,
+            "canonical_payload": to_json_compatible(view.payload),
+            "digest_format": view.digest.format,
+            "digest_value": view.digest.value,
+        }
+        inserted = self._connection.execute(
+            pg_insert(analysis_view)
+            .values(**values)
+            .on_conflict_do_nothing(index_elements=[analysis_view.c.analysis_view_id])
+            .returning(analysis_view.c.analysis_view_id)
+        ).scalar_one_or_none()
+        if inserted is None:
+            existing = (
+                self._connection.execute(
+                    sa.select(analysis_view).where(
+                        analysis_view.c.analysis_view_id == values["analysis_view_id"]
+                    )
+                )
+                .mappings()
+                .one()
             )
-        )
+            _require_exact_replay(
+                cast(Mapping[str, object], existing), values, "analysis view"
+            )
+            existing_associations = set(
+                self._connection.execute(
+                    sa.select(
+                        analysis_view_observation.c.facet_role_id,
+                        analysis_view_observation.c.observation_version_id,
+                    ).where(
+                        analysis_view_observation.c.analysis_view_id
+                        == values["analysis_view_id"]
+                    )
+                ).tuples()
+            )
+            expected_associations = {
+                (facet_role_id, _uuid(observation_id))
+                for facet_role_id, observation_id in view.observation_versions
+            }
+            if existing_associations != expected_associations:
+                raise ValueError(
+                    "analysis view identity collided with different evidence links"
+                )
+            return
         self._fault(FaultPoint.AFTER_ANALYSIS_VIEW_INSERT)
         for facet_role_id, observation_id in view.observation_versions:
             self._connection.execute(
@@ -695,6 +796,231 @@ class PostgresAnalysisViewRepository:
                 )
             )
             self._fault(FaultPoint.AFTER_ASSOCIATION_INSERT)
+
+
+class PostgresPreparednessProfileRepository:
+    """Immutable exact-profile storage with linear-successor validation."""
+
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def get(
+        self,
+        *,
+        profile_id: PreparednessProfileId,
+        version: int,
+    ) -> PreparednessProfileRecord | None:
+        row = (
+            self._connection.execute(
+                sa.select(preparedness_profile)
+                .where(
+                    preparedness_profile.c.profile_id == _uuid(profile_id),
+                    preparedness_profile.c.profile_version == version,
+                )
+                .with_for_update()
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            return None
+        predecessor = row["predecessor_profile_id"]
+        return PreparednessProfileRecord(
+            profile_id=PreparednessProfileId(str(row["profile_id"])),
+            version=int(row["profile_version"]),
+            repository_id=int(row["repository_id"]),
+            effective_from=row["effective_from"].astimezone(UTC),
+            predecessor_profile_id=(
+                PreparednessProfileId(str(predecessor))
+                if predecessor is not None
+                else None
+            ),
+            predecessor_profile_version=(
+                int(row["predecessor_profile_version"])
+                if row["predecessor_profile_version"] is not None
+                else None
+            ),
+            payload=row["canonical_payload"],
+            digest=Digest(
+                value=str(row["digest_value"]),
+                format=str(row["digest_format"]),
+            ),
+        )
+
+    def get_successor(
+        self,
+        *,
+        profile_id: PreparednessProfileId,
+        version: int,
+    ) -> PreparednessProfileRecord | None:
+        successor_identity = (
+            self._connection.execute(
+                sa.select(
+                    preparedness_profile.c.profile_id,
+                    preparedness_profile.c.profile_version,
+                ).where(
+                    preparedness_profile.c.predecessor_profile_id == _uuid(profile_id),
+                    preparedness_profile.c.predecessor_profile_version == version,
+                )
+            )
+            .tuples()
+            .one_or_none()
+        )
+        if successor_identity is None:
+            return None
+        successor_id, successor_version = successor_identity
+        return self.get(
+            profile_id=PreparednessProfileId(str(successor_id)),
+            version=int(successor_version),
+        )
+
+    def insert(self, profile: PreparednessProfileRecord) -> None:
+        predecessor_id = profile.predecessor_profile_id
+        predecessor_version = profile.predecessor_profile_version
+        if (predecessor_id is None) != (predecessor_version is None):
+            raise ValueError("profile predecessor identity must be all-or-none")
+        if predecessor_id is not None and predecessor_version is not None:
+            predecessor = (
+                self._connection.execute(
+                    sa.select(
+                        preparedness_profile.c.repository_id,
+                        preparedness_profile.c.effective_from,
+                    )
+                    .where(
+                        preparedness_profile.c.profile_id == _uuid(predecessor_id),
+                        preparedness_profile.c.profile_version == predecessor_version,
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if predecessor is None:
+                raise ValueError("exact predecessor profile does not exist")
+            if int(predecessor["repository_id"]) != profile.repository_id:
+                raise ValueError("profile successor repository differs")
+            if profile.effective_from <= predecessor["effective_from"]:
+                raise ValueError("profile successor must become effective later")
+            latest_assessment_seal = self._connection.scalar(
+                sa.select(
+                    sa.func.max(preparedness_assessment.c.evidence_sealed_at)
+                ).where(
+                    preparedness_assessment.c.profile_id == _uuid(predecessor_id),
+                    preparedness_assessment.c.profile_version == predecessor_version,
+                )
+            )
+            if (
+                latest_assessment_seal is not None
+                and profile.effective_from <= latest_assessment_seal
+            ):
+                raise ValueError(
+                    "profile successor cannot retroactively invalidate an assessment"
+                )
+
+        self._connection.execute(
+            preparedness_profile.insert().values(
+                profile_id=_uuid(profile.profile_id),
+                profile_version=profile.version,
+                repository_id=profile.repository_id,
+                effective_from=profile.effective_from,
+                predecessor_profile_id=(
+                    _uuid(predecessor_id) if predecessor_id is not None else None
+                ),
+                predecessor_profile_version=predecessor_version,
+                schema_id="github-steward/preparedness-profile/v1",
+                canonical_payload=to_json_compatible(profile.payload),
+                digest_format=profile.digest.format,
+                digest_value=profile.digest.value,
+            )
+        )
+
+
+class PostgresPreparednessAssessmentRepository:
+    """Immutable assessment storage bound to explicit analysis-view evidence."""
+
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def insert(self, assessment: PreparednessAssessmentRecord) -> None:
+        locked_profile_effective_from = self._connection.scalar(
+            sa.select(preparedness_profile.c.effective_from)
+            .where(
+                preparedness_profile.c.profile_id == _uuid(assessment.profile_id),
+                preparedness_profile.c.profile_version == assessment.profile_version,
+            )
+            .with_for_update()
+        )
+        if locked_profile_effective_from is None:
+            raise ValueError("exact assessment profile does not exist")
+        values: dict[str, object] = {
+            "assessment_id": _uuid(assessment.assessment_id),
+            "repository_id": assessment.repository_id,
+            "pull_number": assessment.pull_number,
+            "head_sha": assessment.head_sha,
+            "profile_id": _uuid(assessment.profile_id),
+            "profile_version": assessment.profile_version,
+            "analysis_view_id": _uuid(assessment.analysis_view_id),
+            "evidence_sealed_at": assessment.evidence_sealed_at,
+            "evaluated_at": assessment.evaluated_at,
+            "verdict": assessment.verdict,
+            "schema_id": "github-steward/preparedness-assessment/v1",
+            "canonical_payload": to_json_compatible(assessment.payload),
+            "digest_format": assessment.digest.format,
+            "digest_value": assessment.digest.value,
+        }
+        inserted = self._connection.execute(
+            pg_insert(preparedness_assessment)
+            .values(**values)
+            .on_conflict_do_nothing(
+                index_elements=[preparedness_assessment.c.assessment_id]
+            )
+            .returning(preparedness_assessment.c.assessment_id)
+        ).scalar_one_or_none()
+        if inserted is None:
+            existing = (
+                self._connection.execute(
+                    sa.select(preparedness_assessment).where(
+                        preparedness_assessment.c.assessment_id
+                        == values["assessment_id"]
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            _require_exact_replay(
+                cast(Mapping[str, object], existing),
+                values,
+                "preparedness assessment",
+            )
+            existing_evidence = set(
+                self._connection.execute(
+                    sa.select(
+                        preparedness_assessment_evidence.c.facet_role_id,
+                        preparedness_assessment_evidence.c.observation_version_id,
+                    ).where(
+                        preparedness_assessment_evidence.c.assessment_id
+                        == values["assessment_id"]
+                    )
+                ).tuples()
+            )
+            expected_evidence = {
+                (facet_role_id, _uuid(observation_id))
+                for facet_role_id, observation_id in assessment.evidence_observations
+            }
+            if existing_evidence != expected_evidence:
+                raise ValueError(
+                    "preparedness assessment identity collided with different evidence"
+                )
+            return
+        for facet_role_id, observation_id in assessment.evidence_observations:
+            self._connection.execute(
+                preparedness_assessment_evidence.insert().values(
+                    assessment_id=_uuid(assessment.assessment_id),
+                    analysis_view_id=_uuid(assessment.analysis_view_id),
+                    observation_version_id=_uuid(observation_id),
+                    facet_role_id=facet_role_id,
+                )
+            )
 
 
 class PostgresAuditEventRepository:

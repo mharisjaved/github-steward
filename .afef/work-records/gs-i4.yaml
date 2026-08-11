@@ -1,0 +1,100 @@
+# AFEF v0.2.0 High Assurance work record.
+schema_version: "0.2.0"
+work_id: "GS-I4"
+related_specifications:
+  - "SPEC-0005"
+  - "SPEC-0006"
+risk_profile: high_assurance
+scope:
+  in_scope:
+    - "Implement deterministic preparedness from recorded/fake GitHub evidence, coherent A/pass1/B/pass2/C acquisition, immutable persistence, facet-aware ordering, and existing-pointer replay/promotion from accepted source 87feabb3b9ef6c4470c98b95b52319a5128d58f4."
+    - "Validate with the frozen offline environment and disposable local PostgreSQL 16, then create one direct-child candidate commit and persistent evidence package."
+  out_of_scope:
+    - "GitHub authentication, OAuth, webhooks, live GitHub runtime, GitHub writes, deployment, production credential flows, LLMs, GS-I5, execution enablement, remote Git operations, push, tag, pull request, or merge."
+authorization_envelope:
+  operations:
+    - operation_id: "OP-GS-I4-LOCAL-READS"
+      effect_class: local-read
+      decision: permitted
+      authorization_requirement: bounded_work_envelope
+      description: "Read the accepted repository, frozen environment, local test configuration, and credential-redacted validation evidence."
+    - operation_id: "OP-GS-I4-LOCAL-WRITES"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Modify at most 40 GS-I4 paths, create one local candidate commit, and write the authorized persistent evidence package."
+    - operation_id: "OP-GS-I4-DISPOSABLE-DATABASES"
+      effect_class: local-destructive
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create and remove only harness-designated disposable local PostgreSQL databases using GS_TEST_DATABASE_ADMIN_URL."
+    - operation_id: "OP-GS-I4-GITHUB-READS"
+      effect_class: external-read
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "Every GitHub API, connector, authenticated access, remote Git read, and GH_TOKEN use is prohibited."
+    - operation_id: "OP-GS-I4-GITHUB-WRITES"
+      effect_class: external-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "Every GitHub mutation, remote Git write, push, tag, pull request, and merge is prohibited."
+  authorization_references:
+    - authorization_id: "AUTH-GS-I4-PRODUCT-OWNER"
+      reference: "Product Owner GS-I4 authorized IDE implementation pass."
+      operation_ids:
+        - "OP-GS-I4-LOCAL-WRITES"
+        - "OP-GS-I4-DISPOSABLE-DATABASES"
+  affected_paths:
+    - ".afef"
+    - "README.md"
+    - "migrations/versions/0003_gs_i4_preparedness.py"
+    - "src/github_steward"
+    - "tests"
+  constraints:
+    - "Create branch gs-i4-deterministic-preparedness-coherent-evidence and exactly one direct child of the accepted source with subject feat: add deterministic preparedness and coherent evidence."
+    - "Do not modify pyproject.toml, uv.lock, migrations 0001/0002, or more than 40 paths."
+    - "Use recorded/fake evidence and only GS_TEST_DATABASE_ADMIN_URL for disposable PostgreSQL; never inspect or use GH_TOKEN."
+  stop_conditions:
+    - "Stop on source mismatch, dirty start, dependency authority change, accepted-migration change, required live GitHub access, PostgreSQL unavailability, evidence collision, unresolved material test failure, or path-ceiling breach."
+deliverables:
+  - "GS-I4 implementation, tests, specification and work record, one local candidate commit, bundle, evidence archive, checksums, and implementation completion report."
+implementation_state: verified
+implementer:
+  actor_id: "local-ide-agent-gs-i4"
+  role: ide_agent
+validation_summaries:
+  - check: "Frozen offline static and architecture validation"
+    result: passed
+    summary: "CPython 3.12.3, Ruff format and lint, strict mypy, all five Import Linter contracts, and the architecture suite pass without dependency or lock changes."
+  - check: "Deterministic preparedness behavior"
+    result: passed
+    summary: "Unit, contract, and property tests cover exact profiles and assessments, freshness boundaries, uncertainty precedence, status/check/review/requested-reviewer semantics, coherent whole-attempt retry, facet-aware ordering, and bounded current-pointer CAS behavior."
+  - check: "PostgreSQL and migration validation"
+    result: passed
+    summary: "The loopback PostgreSQL 16 CREATEDB-only harness passes disposable-database preflight, linear/no-fork competing successor transactions, immutable repositories, schema invariants, and the 0001 -> 0002 -> gs_i4_0003 migration chain with cleanup."
+  - check: "Complete suite and branch coverage"
+    result: passed
+    summary: "All 769 tests pass with 99.57 percent global branch coverage and 99.78 percent combined coverage; every new GS-I4 preparedness, evidence, coherent-acquisition, pipeline, and evidence-port module has 100 percent statement and branch coverage."
+  - check: "AFEF, integrity, and credential safety"
+    result: passed
+    summary: "The cleared-environment pinned AFEF validator, protected-file invariance, changed-path ceiling, git integrity, bundle/archive verification, and credential-signature scan pass; evidence contains no secret values or environment files."
+reviews:
+  - review_id: "GS-I4-IMPLEMENTATION-SUPERVISOR"
+    status: pending
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+    evidence_reference: ".afef/specifications/gs-i4-deterministic-preparedness.md"
+independent_review:
+  status: pending
+final_gate:
+  status: not_issued
+human_checkpoint:
+  status: awaiting
+  owner:
+    actor_id: "github-steward-implementation-supervisor"
+    role: implementation_supervisor
+  next_required_action: "Review the exact local GS-I4 candidate and persistent evidence before any Product Owner acceptance decision."
+known_limitations:
+  - "GS-I4 proves only deterministic local preparedness over recorded/fake evidence and disposable PostgreSQL; it is not a live-integration, deployment, or production-readiness claim."
+next_action: "Implementation Supervisor reviews the exact local candidate and persistent evidence before any Product Owner acceptance or integration decision."

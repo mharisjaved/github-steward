@@ -39,12 +39,13 @@ The accepted baseline is **Redesign v2 + Redesign v2.1 Resolution Package +
 Redesign v2.1.1 Clarifications and Corrections + Final Architecture Readiness
 Review**.
 
-This disposition establishes architecture readiness for a future, separately
-authorized local Sprint 1. It does not authorize GS-I1, GitHub integration,
-production implementation, external reads or writes, deployment, release, or a
-production-readiness claim. This repository currently records intended
-architecture only; conformance evidence establishes documentation-contract
-conformance, not operational correctness.
+At the time of the GS-A0/R0 disposition, this established architecture
+readiness only for a future, separately authorized local Sprint 1. It did not
+authorize GS-I1, GitHub integration, production implementation, external reads
+or writes, deployment, release, or a production-readiness claim. Subsequent
+local implementation candidates are governed by their own bounded
+authorizations; the original conformance evidence established
+documentation-contract conformance, not operational correctness.
 
 `READY_FOR_HUMAN_REVIEW` means only that a pull request is open, non-draft, its
 bounded evidence is coherent and current, and no pending or blocking automation
@@ -375,8 +376,8 @@ reconciliation-before-retry, stable GitHub identity with transient user token,
 Pull requests: write only for the later sandbox comment, Python with `uv`, no
 LLM in the first slice, no LLM tool execution, and `AUTH-01` Option C.
 
-Deferred decisions include real GitHub reads and App registration, all GitHub
-writes, effective ruleset evaluation, multi-tenancy, general multi-agent
+Deferred decisions include authenticated GitHub App reads and App registration,
+all GitHub writes, effective ruleset evaluation, multi-tenancy, general multi-agent
 arbitration, LLM integration, Redis, external object storage, microservices,
 managed or sign-only key infrastructure, cryptographically tamper-evident
 audit, and broader production deployment.
@@ -392,8 +393,9 @@ Open implementation decisions are exact package layout, ORM versus direct
 database access, migration tool, web framework, RFC 8785 implementation
 dependency, testing and architecture-enforcement libraries, VPS provider and
 sizing, deployment files, telemetry, backup and secret-management products,
-and the concrete pagination ceilings and freshness configuration. They must be
-explicitly decided at their applicable future gate and are not selected here.
+and broader production deployment. GS-I3 fixed the anonymous-read acquisition
+ceilings, and GS-I4 fixes the preparedness freshness window at 600 seconds;
+other deferred decisions must be selected only at their applicable gate.
 
 ## 15. Finding-closure matrix
 
@@ -434,10 +436,33 @@ authorization and must make the still-open implementation decisions explicitly.
   retention approval, SLO approval, and explicit release authority.
 
 No Integration, Write, Operational, or Production Release gate is passed by
-this specification. No production implementation has begun, and no
-production-readiness claim is made.
+this specification. No live production integration or deployment has begun;
+the bounded local implementation candidates do not constitute a
+production-readiness claim.
 
-## 18. Assumptions and risks
+## 18. GS-I4 deterministic preparedness boundary
+
+The separately authorized local GS-I4 candidate implements the first
+profile-driven decision kernel over recorded or fake GitHub evidence. It seals
+a view only after bounded A/pass-1/B/pass-2/C semantic equality, applies one exact
+`PreparednessProfile` version at `evidence_sealed_at`, produces one deterministic
+`PreparednessAssessment`, persists immutable profile/assessment/evidence rows,
+and compares candidate evidence facet by facet before using the existing GS-I2
+current-pointer CAS.
+
+GS-I4 fixes status identity to Python `casefold()` without trimming or Unicode
+normalization, check identity to numeric producer application plus check name,
+review identity to numeric reviewer and current-head history, and requested
+reviewer identity to numeric user/team IDs. Evidence uncertainty always
+precedes ordinary blockers. Replay does not change the pointer; regression,
+incomparability, mixed ordering, and unresolved concurrency cannot promote.
+
+This boundary adds no live GitHub runtime, credential, authentication, webhook,
+write, deployment, LLM, execution-worker capability, or production-readiness
+claim. The production direction is recorded separately in SPEC-0005 and the
+exact GS-I4 contract in SPEC-0006.
+
+## 19. Assumptions and risks
 
 The architecture relies on later verification of real GitHub behavior,
 permissions, endpoint semantics, bounded acquisition settings, and operator

@@ -11,7 +11,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.engine import Engine
 
-EXPECTED_TABLES = {
+GS_I2_TABLES = {
     "delivery_inbox",
     "work_record",
     "work_attempt",
@@ -21,13 +21,20 @@ EXPECTED_TABLES = {
     "analysis_view_observation",
     "audit_event",
 }
-EXPECTED_APPEND_ONLY_TABLES = {
+GS_I4_TABLES = {
+    "preparedness_profile",
+    "preparedness_assessment",
+    "preparedness_assessment_evidence",
+}
+EXPECTED_TABLES = GS_I2_TABLES | GS_I4_TABLES
+GS_I2_APPEND_ONLY_TABLES = {
     "delivery_inbox",
     "canonical_observation",
     "analysis_view",
     "analysis_view_observation",
     "audit_event",
 }
+EXPECTED_APPEND_ONLY_TABLES = GS_I2_APPEND_ONLY_TABLES | GS_I4_TABLES
 
 
 def _config() -> Config:
@@ -69,15 +76,17 @@ def _truncate_application_data(engine: Engine) -> None:
         )
 
 
-def test_exactly_two_linear_revisions_and_one_head() -> None:
+def test_exactly_three_linear_revisions_and_one_head() -> None:
     script = ScriptDirectory.from_config(_config())
     revisions = list(script.walk_revisions())
-    assert len(revisions) == 2
-    assert revisions[0].revision == "gs_i2_0002"
-    assert revisions[0].down_revision == "gs_i1_0001"
-    assert revisions[1].revision == "gs_i1_0001"
-    assert revisions[1].down_revision is None
-    assert script.get_heads() == ["gs_i2_0002"]
+    assert len(revisions) == 3
+    assert revisions[0].revision == "gs_i4_0003"
+    assert revisions[0].down_revision == "gs_i2_0002"
+    assert revisions[1].revision == "gs_i2_0002"
+    assert revisions[1].down_revision == "gs_i1_0001"
+    assert revisions[2].revision == "gs_i1_0001"
+    assert revisions[2].down_revision is None
+    assert script.get_heads() == ["gs_i4_0003"]
 
 
 def test_transactional_downgrade_and_reupgrade(
@@ -88,11 +97,9 @@ def test_transactional_downgrade_and_reupgrade(
     assert _application_tables(postgres_engine) == EXPECTED_TABLES
     assert _append_only_trigger_tables(postgres_engine) == EXPECTED_APPEND_ONLY_TABLES
     _truncate_application_data(postgres_engine)
-    command.downgrade(_config(), "gs_i1_0001")
-    assert _application_tables(postgres_engine) == EXPECTED_TABLES
-    assert _append_only_trigger_tables(postgres_engine) == (
-        EXPECTED_APPEND_ONLY_TABLES - {"delivery_inbox"}
-    )
+    command.downgrade(_config(), "gs_i2_0002")
+    assert _application_tables(postgres_engine) == GS_I2_TABLES
+    assert _append_only_trigger_tables(postgres_engine) == GS_I2_APPEND_ONLY_TABLES
     command.upgrade(_config(), "head")
     assert _application_tables(postgres_engine) == EXPECTED_TABLES
     assert _append_only_trigger_tables(postgres_engine) == EXPECTED_APPEND_ONLY_TABLES
@@ -124,11 +131,11 @@ def test_nonempty_inbox_migration_fails_closed_and_can_recover(
             revision = connection.scalar(
                 sa.text("SELECT version_num FROM alembic_version")
             )
-        if revision != "gs_i2_0002":
+        if revision != "gs_i4_0003":
             command.upgrade(_config(), "head")
 
 
-def test_offline_sql_generation_contains_both_revisions(
+def test_offline_sql_generation_contains_all_revisions(
     postgres_database_url: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -137,3 +144,4 @@ def test_offline_sql_generation_contains_both_revisions(
     output = capsys.readouterr().out
     assert "Running upgrade  -> gs_i1_0001" in output
     assert "Running upgrade gs_i1_0001 -> gs_i2_0002" in output
+    assert "Running upgrade gs_i2_0002 -> gs_i4_0003" in output
