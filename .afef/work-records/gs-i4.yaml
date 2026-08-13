@@ -96,6 +96,9 @@ implementation_state: verified
 implementer:
   actor_id: "local-ide-agent-gs-i4"
   role: ide_agent
+repository_evidence:
+  commit: "c491fadb45b8edbab226439bb3affc815617a387"
+  working_tree: "Accepted CR1 tree 31687330e03d2c05d62d75b538c30af4a27a19fc; integrated and remotely verified on origin/main."
 validation_summaries:
   - check: "Frozen offline static and architecture validation"
     result: passed
@@ -112,23 +115,44 @@ validation_summaries:
   - check: "AFEF, integrity, and credential safety"
     result: passed
     summary: "The cleared-environment pinned AFEF validator, protected-file invariance, changed-path ceiling, git integrity, bundle/archive verification, and credential-signature scan pass; evidence contains no secret values or environment files."
+  - check: "GS-I4 assurance and evidence closure"
+    result: passed
+    summary: "Implementation Supervisor GREEN and Independent Review GREEN accepted exact CR1 commit c491fadb45b8edbab226439bb3affc815617a387 with tree 31687330e03d2c05d62d75b538c30af4a27a19fc; GS-I4-IR-EVID-001 is CLOSED."
+  - check: "GS-I4 Product Owner acceptance and integration"
+    result: passed
+    summary: "The Product Owner FORMALLY_ACCEPTED the exact CR1 candidate. It was integrated by DIRECT_NON_FORCE_FAST_FORWARD from origin/main 87feabb3b9ef6c4470c98b95b52319a5128d58f4 to c491fadb45b8edbab226439bb3affc815617a387 and remotely verified at tree 31687330e03d2c05d62d75b538c30af4a27a19fc; force_push=false and history_rewritten=false."
+  - check: "GS-I4 lifecycle closeout"
+    result: passed
+    summary: "corrected_definition=FORMALLY_ACCEPTED; implementation=COMPLETE; implementation_supervisor=GREEN; independent_review=GREEN; product_owner_candidate_acceptance=FORMALLY_ACCEPTED; integration=INTEGRATED_AND_REMOTELY_VERIFIED; final_status=FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED."
 reviews:
   - review_id: "GS-I4-IMPLEMENTATION-SUPERVISOR"
-    status: pending
+    status: completed
     reviewer:
       actor_id: "github-steward-implementation-supervisor"
       role: implementation_supervisor
+    recommendation: accept
     evidence_reference: ".afef/specifications/gs-i4-deterministic-preparedness.md"
 independent_review:
-  status: pending
+  status: accepted
+  reviewer:
+    actor_id: "github-steward-independent-reviewer"
+    role: independent_reviewer
+  evidence_reference: ".afef/specifications/gs-i4-deterministic-preparedness.md"
+  reviewed_at: "2026-08-13T13:54:42Z"
 final_gate:
-  status: not_issued
+  status: accepted
+  owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+  recorded_at: "2026-08-13T14:37:00Z"
 human_checkpoint:
-  status: awaiting
+  status: completed
   owner:
     actor_id: "github-steward-implementation-supervisor"
     role: implementation_supervisor
-  next_required_action: "Review the exact local GS-I4 candidate and persistent evidence before any Product Owner acceptance decision."
+  next_required_action: "No GS-I4 action remains. GS-I5 is the next package but is not authorized by this closeout and requires separate Product Owner authorization."
 known_limitations:
   - "GS-I4 proves only deterministic local preparedness over recorded/fake evidence and disposable PostgreSQL; it is not a live-integration, deployment, or production-readiness claim."
-next_action: "Implementation Supervisor reviews the exact local candidate and persistent evidence before any Product Owner acceptance or integration decision."
+  - "GS-MAINT-001 is a NON_BLOCKING_CARRY_FORWARD and does not prevent GS-I4 closure."
+  - "GS-I4 closeout creates no GS-I5, deployment, production, release, tag, or additional GitHub authority."
+next_action: "GS-I4 is FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED. GS-I5 is the next package but remains unauthorized and must not begin without separate Product Owner authorization."
