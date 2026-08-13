@@ -21,25 +21,26 @@ from github_steward.adapters.postgres.metadata import (
     preparedness_assessment_evidence,
 )
 from github_steward.adapters.postgres.unit_of_work import PostgresUnitOfWork
-from github_steward.application.preparedness_pipeline import (
+from github_steward.application.preparedness import (
     DeterministicPreparednessPipeline,
     PointerPromotionOutcome,
 )
-from github_steward.domain.acquisition import RepositoryTarget
-from github_steward.domain.github_evidence import (
+from github_steward.domain.acquisition import (
     SEMANTIC_FACETS,
     CoherentAnalysisView,
     PullRequestAnchor,
+    RepositoryTarget,
     RequestedReviewers,
 )
 from github_steward.domain.preparedness import (
+    AcquisitionConfigurationIdentity,
     PreparednessProfile,
     PreparednessReasonCode,
     PreparednessVerdict,
-    ProfileIdentity,
+    ProfileReference,
     PullRequestIdentity,
 )
-from github_steward.ports.github_evidence import CoherentAcquisitionResult
+from github_steward.ports.github import CoherentAcquisitionResult
 
 ROOT_EFFECTIVE_AT = datetime(2026, 8, 11, 13, tzinfo=UTC)
 SUCCESSOR_EFFECTIVE_AT = ROOT_EFFECTIVE_AT + timedelta(seconds=1)
@@ -160,6 +161,7 @@ def _profile(
     repository_id: int,
     version: int,
     effective_from: datetime,
+    predecessor: ProfileReference | None = None,
 ) -> PreparednessProfile:
     return PreparednessProfile(
         profile_id=profile_id,
@@ -167,10 +169,11 @@ def _profile(
         repository_id=repository_id,
         required_checks=(),
         required_statuses=(),
-        block_on_changes_requested=True,
-        acquisition_configuration_digest=CONFIGURATION,
+        accepted_check_conclusions=("success",),
+        block_on_current_head_changes_requested=True,
+        acquisition_configuration=AcquisitionConfigurationIdentity(1, CONFIGURATION),
         effective_from=effective_from,
-        predecessor=None if version == 1 else ProfileIdentity(profile_id, version - 1),
+        predecessor=predecessor,
     )
 
 
@@ -215,13 +218,14 @@ def test_explicit_predecessor_at_successor_boundary_persists_indeterminate(
             version=1,
             effective_from=ROOT_EFFECTIVE_AT,
         )
-    ).identity
+    ).reference
     pipeline.register_profile(
         _profile(
             profile_id=BOUNDARY_PROFILE_ID,
             repository_id=BOUNDARY_REPOSITORY_ID,
             version=2,
             effective_from=SUCCESSOR_EFFECTIVE_AT,
+            predecessor=predecessor,
         )
     )
 
@@ -232,7 +236,7 @@ def test_explicit_predecessor_at_successor_boundary_persists_indeterminate(
             BOUNDARY_PULL_NUMBER,
             BOUNDARY_PULL_REQUEST_ID,
         ),
-        profile_identity=predecessor,
+        profile_reference=predecessor,
     )
 
     assert result.assessment is not None
@@ -281,7 +285,7 @@ def test_exact_pipeline_replay_is_idempotent_and_does_not_increment_pointer(
             version=1,
             effective_from=ROOT_EFFECTIVE_AT,
         )
-    ).identity
+    ).reference
     expected = _expected_identity(
         REPLAY_REPOSITORY_ID,
         REPLAY_PULL_NUMBER,
@@ -291,12 +295,12 @@ def test_exact_pipeline_replay_is_idempotent_and_does_not_increment_pointer(
     first = pipeline.assess(
         target=REPLAY_TARGET,
         expected_identity=expected,
-        profile_identity=profile,
+        profile_reference=profile,
     )
     second = pipeline.assess(
         target=REPLAY_TARGET,
         expected_identity=expected,
-        profile_identity=profile,
+        profile_reference=profile,
     )
 
     assert first.pointer_outcome is PointerPromotionOutcome.POINTER_ADVANCED

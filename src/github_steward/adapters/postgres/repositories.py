@@ -840,6 +840,15 @@ class PostgresPreparednessProfileRepository:
                 if row["predecessor_profile_version"] is not None
                 else None
             ),
+            predecessor_digest=(
+                Digest(
+                    format=str(row["predecessor_digest_format"]),
+                    value=str(row["predecessor_digest_value"]),
+                )
+                if row["predecessor_digest_format"] is not None
+                and row["predecessor_digest_value"] is not None
+                else None
+            ),
             payload=row["canonical_payload"],
             digest=Digest(
                 value=str(row["digest_value"]),
@@ -877,14 +886,30 @@ class PostgresPreparednessProfileRepository:
     def insert(self, profile: PreparednessProfileRecord) -> None:
         predecessor_id = profile.predecessor_profile_id
         predecessor_version = profile.predecessor_profile_version
-        if (predecessor_id is None) != (predecessor_version is None):
+        predecessor_digest = profile.predecessor_digest
+        if (
+            len(
+                {
+                    predecessor_id is None,
+                    predecessor_version is None,
+                    predecessor_digest is None,
+                }
+            )
+            != 1
+        ):
             raise ValueError("profile predecessor identity must be all-or-none")
-        if predecessor_id is not None and predecessor_version is not None:
+        if (
+            predecessor_id is not None
+            and predecessor_version is not None
+            and predecessor_digest is not None
+        ):
             predecessor = (
                 self._connection.execute(
                     sa.select(
                         preparedness_profile.c.repository_id,
                         preparedness_profile.c.effective_from,
+                        preparedness_profile.c.digest_format,
+                        preparedness_profile.c.digest_value,
                     )
                     .where(
                         preparedness_profile.c.profile_id == _uuid(predecessor_id),
@@ -899,6 +924,14 @@ class PostgresPreparednessProfileRepository:
                 raise ValueError("exact predecessor profile does not exist")
             if int(predecessor["repository_id"]) != profile.repository_id:
                 raise ValueError("profile successor repository differs")
+            if (
+                Digest(
+                    format=str(predecessor["digest_format"]),
+                    value=str(predecessor["digest_value"]),
+                )
+                != predecessor_digest
+            ):
+                raise ValueError("profile successor predecessor digest differs")
             if profile.effective_from <= predecessor["effective_from"]:
                 raise ValueError("profile successor must become effective later")
             latest_assessment_seal = self._connection.scalar(
@@ -927,6 +960,14 @@ class PostgresPreparednessProfileRepository:
                     _uuid(predecessor_id) if predecessor_id is not None else None
                 ),
                 predecessor_profile_version=predecessor_version,
+                predecessor_digest_format=(
+                    predecessor_digest.format
+                    if predecessor_digest is not None
+                    else None
+                ),
+                predecessor_digest_value=(
+                    predecessor_digest.value if predecessor_digest is not None else None
+                ),
                 schema_id="github-steward/preparedness-profile/v1",
                 canonical_payload=to_json_compatible(profile.payload),
                 digest_format=profile.digest.format,
@@ -942,16 +983,55 @@ class PostgresPreparednessAssessmentRepository:
         self._connection = connection
 
     def insert(self, assessment: PreparednessAssessmentRecord) -> None:
-        locked_profile_effective_from = self._connection.scalar(
-            sa.select(preparedness_profile.c.effective_from)
-            .where(
-                preparedness_profile.c.profile_id == _uuid(assessment.profile_id),
-                preparedness_profile.c.profile_version == assessment.profile_version,
+        locked_profile = (
+            self._connection.execute(
+                sa.select(
+                    preparedness_profile.c.effective_from,
+                    preparedness_profile.c.digest_format,
+                    preparedness_profile.c.digest_value,
+                )
+                .where(
+                    preparedness_profile.c.profile_id == _uuid(assessment.profile_id),
+                    preparedness_profile.c.profile_version
+                    == assessment.profile_version,
+                )
+                .with_for_update()
             )
-            .with_for_update()
+            .mappings()
+            .one_or_none()
         )
-        if locked_profile_effective_from is None:
+        if locked_profile is None:
             raise ValueError("exact assessment profile does not exist")
+        if (
+            Digest(
+                format=str(locked_profile["digest_format"]),
+                value=str(locked_profile["digest_value"]),
+            )
+            != assessment.profile_digest
+        ):
+            raise ValueError("exact assessment profile digest did not match")
+        view_digest = (
+            self._connection.execute(
+                sa.select(
+                    analysis_view.c.digest_format,
+                    analysis_view.c.digest_value,
+                ).where(
+                    analysis_view.c.analysis_view_id
+                    == _uuid(assessment.analysis_view_id)
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if (
+            view_digest is None
+            or Digest(
+                format=str(view_digest["digest_format"]),
+                value=str(view_digest["digest_value"]),
+            )
+            != assessment.analysis_view_digest
+        ):
+            raise ValueError("exact assessment analysis-view digest did not match")
         values: dict[str, object] = {
             "assessment_id": _uuid(assessment.assessment_id),
             "repository_id": assessment.repository_id,
@@ -959,7 +1039,11 @@ class PostgresPreparednessAssessmentRepository:
             "head_sha": assessment.head_sha,
             "profile_id": _uuid(assessment.profile_id),
             "profile_version": assessment.profile_version,
+            "profile_digest_format": assessment.profile_digest.format,
+            "profile_digest_value": assessment.profile_digest.value,
             "analysis_view_id": _uuid(assessment.analysis_view_id),
+            "analysis_view_digest_format": assessment.analysis_view_digest.format,
+            "analysis_view_digest_value": assessment.analysis_view_digest.value,
             "evidence_sealed_at": assessment.evidence_sealed_at,
             "evaluated_at": assessment.evaluated_at,
             "verdict": assessment.verdict,

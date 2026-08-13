@@ -29,12 +29,14 @@ contexts do not silently replace those identities.
 
 Deterministic evidence is sealed before conclusions are drawn. Canonical
 observations, analysis views, profiles, and assessments are immutable and use
-`jcs-sha256/v1`. Current state is represented by the existing versioned
+`jcs-sha256/v1`; assessments retain exact profile and analysis-view digest
+bindings. Current state is represented by the existing versioned
 compare-and-swap observation pointer. Source ordering is facet-aware; ambiguous
 or regressing evidence cannot replace a current observation.
 
 GS-I4 implements only the credential-free preparedness kernel of that direction:
-recorded or fake GitHub evidence, bounded coherent acquisition, exact profile
+recorded or fake GitHub evidence, bounded coherent acquisition, exact
+profile-ID/version/digest application with profile-bound check policy,
 application, deterministic assessment, immutable PostgreSQL persistence, and
 current-pointer replay or promotion. It introduces no GitHub App authentication,
 OAuth, webhook runtime, deployment, live GitHub access, GitHub mutation, LLM,

@@ -258,6 +258,12 @@ analysis_view = sa.Table(
     sa.Column("digest_value", sa.Text(), nullable=False),
     sa.Column("created_at", _TIMESTAMP, nullable=False, server_default=_NOW),
     sa.PrimaryKeyConstraint("analysis_view_id", name="pk_analysis_view"),
+    sa.UniqueConstraint(
+        "analysis_view_id",
+        "digest_format",
+        "digest_value",
+        name="uq_analysis_view_exact_digest",
+    ),
     sa.CheckConstraint(
         "schema_id <> ''",
         name="ck_analysis_view_schema_id_nonempty",
@@ -355,6 +361,8 @@ preparedness_profile = sa.Table(
     sa.Column("effective_from", _TIMESTAMP, nullable=False),
     sa.Column("predecessor_profile_id", _UUID, nullable=True),
     sa.Column("predecessor_profile_version", sa.Integer(), nullable=True),
+    sa.Column("predecessor_digest_format", sa.Text(), nullable=True),
+    sa.Column("predecessor_digest_value", sa.Text(), nullable=True),
     sa.Column("schema_id", sa.Text(), nullable=False),
     sa.Column("canonical_payload", _JSONB, nullable=False),
     sa.Column("digest_format", sa.Text(), nullable=False),
@@ -372,6 +380,14 @@ preparedness_profile = sa.Table(
         name="uq_preparedness_profile_repository_identity",
     ),
     sa.UniqueConstraint(
+        "repository_id",
+        "profile_id",
+        "profile_version",
+        "digest_format",
+        "digest_value",
+        name="uq_preparedness_profile_exact_digest",
+    ),
+    sa.UniqueConstraint(
         "predecessor_profile_id",
         "predecessor_profile_version",
         name="uq_preparedness_profile_predecessor",
@@ -381,11 +397,15 @@ preparedness_profile = sa.Table(
             "repository_id",
             "predecessor_profile_id",
             "predecessor_profile_version",
+            "predecessor_digest_format",
+            "predecessor_digest_value",
         ],
         [
             "preparedness_profile.repository_id",
             "preparedness_profile.profile_id",
             "preparedness_profile.profile_version",
+            "preparedness_profile.digest_format",
+            "preparedness_profile.digest_value",
         ],
         name="fk_preparedness_profile_predecessor",
     ),
@@ -399,9 +419,13 @@ preparedness_profile = sa.Table(
     ),
     sa.CheckConstraint(
         "(profile_version = 1 AND predecessor_profile_id IS NULL "
-        "AND predecessor_profile_version IS NULL) OR "
+        "AND predecessor_profile_version IS NULL "
+        "AND predecessor_digest_format IS NULL "
+        "AND predecessor_digest_value IS NULL) OR "
         "(profile_version > 1 AND predecessor_profile_id = profile_id "
-        "AND predecessor_profile_version = profile_version - 1)",
+        "AND predecessor_profile_version = profile_version - 1 "
+        "AND predecessor_digest_format = 'jcs-sha256/v1' "
+        "AND predecessor_digest_value ~ '^[0-9a-f]{64}$')",
         name="ck_preparedness_profile_linear_identity",
     ),
     sa.CheckConstraint(
@@ -431,7 +455,11 @@ preparedness_assessment = sa.Table(
     sa.Column("head_sha", sa.Text(), nullable=False),
     sa.Column("profile_id", _UUID, nullable=False),
     sa.Column("profile_version", sa.Integer(), nullable=False),
+    sa.Column("profile_digest_format", sa.Text(), nullable=False),
+    sa.Column("profile_digest_value", sa.Text(), nullable=False),
     sa.Column("analysis_view_id", _UUID, nullable=False),
+    sa.Column("analysis_view_digest_format", sa.Text(), nullable=False),
+    sa.Column("analysis_view_digest_value", sa.Text(), nullable=False),
     sa.Column("evidence_sealed_at", _TIMESTAMP, nullable=False),
     sa.Column("evaluated_at", _TIMESTAMP, nullable=False),
     sa.Column("verdict", sa.Text(), nullable=False),
@@ -447,17 +475,33 @@ preparedness_assessment = sa.Table(
         name="uq_preparedness_assessment_view",
     ),
     sa.ForeignKeyConstraint(
-        ["repository_id", "profile_id", "profile_version"],
+        [
+            "repository_id",
+            "profile_id",
+            "profile_version",
+            "profile_digest_format",
+            "profile_digest_value",
+        ],
         [
             "preparedness_profile.repository_id",
             "preparedness_profile.profile_id",
             "preparedness_profile.profile_version",
+            "preparedness_profile.digest_format",
+            "preparedness_profile.digest_value",
         ],
         name="fk_preparedness_assessment_profile",
     ),
     sa.ForeignKeyConstraint(
-        ["analysis_view_id"],
-        ["analysis_view.analysis_view_id"],
+        [
+            "analysis_view_id",
+            "analysis_view_digest_format",
+            "analysis_view_digest_value",
+        ],
+        [
+            "analysis_view.analysis_view_id",
+            "analysis_view.digest_format",
+            "analysis_view.digest_value",
+        ],
         name="fk_preparedness_assessment_view",
     ),
     sa.CheckConstraint(
@@ -475,6 +519,16 @@ preparedness_assessment = sa.Table(
     sa.CheckConstraint(
         "profile_version > 0",
         name="ck_preparedness_assessment_profile_version_positive",
+    ),
+    sa.CheckConstraint(
+        "profile_digest_format = 'jcs-sha256/v1' "
+        "AND profile_digest_value ~ '^[0-9a-f]{64}$'",
+        name="ck_preparedness_assessment_profile_digest",
+    ),
+    sa.CheckConstraint(
+        "analysis_view_digest_format = 'jcs-sha256/v1' "
+        "AND analysis_view_digest_value ~ '^[0-9a-f]{64}$'",
+        name="ck_preparedness_assessment_view_digest",
     ),
     sa.CheckConstraint(
         "verdict IN ('READY_FOR_HUMAN_REVIEW', 'NOT_READY', 'INDETERMINATE')",

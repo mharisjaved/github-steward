@@ -698,6 +698,7 @@ def test_profile_and_assessment_are_immutable_and_explicitly_linked(
         effective_from=NOW,
         predecessor_profile_id=None,
         predecessor_profile_version=None,
+        predecessor_digest=None,
         payload={"profile_id": profile_id, "version": 1},
         digest=Digest("7" * 64),
     )
@@ -708,6 +709,7 @@ def test_profile_and_assessment_are_immutable_and_explicitly_linked(
         effective_from=NOW + timedelta(seconds=1),
         predecessor_profile_id=profile_id,
         predecessor_profile_version=1,
+        predecessor_digest=Digest("7" * 64),
         payload={"profile_id": profile_id, "version": 2},
         digest=Digest("8" * 64),
     )
@@ -718,7 +720,9 @@ def test_profile_and_assessment_are_immutable_and_explicitly_linked(
         head_sha="a" * 40,
         profile_id=profile_id,
         profile_version=1,
+        profile_digest=Digest("7" * 64),
         analysis_view_id=view_id,
+        analysis_view_digest=Digest("b" * 64),
         evidence_sealed_at=NOW,
         evaluated_at=NOW,
         verdict="READY_FOR_HUMAN_REVIEW",
@@ -771,6 +775,32 @@ def test_profile_and_assessment_are_immutable_and_explicitly_linked(
     ):
         unit.observations.append(replace(observation, digest=Digest("c" * 64)))
 
+    with (
+        pytest.raises(ValueError, match="profile digest did not match"),
+        factory(postgres_engine)() as unit,
+    ):
+        unit.assessments.insert(replace(assessment, profile_digest=Digest("c" * 64)))
+
+    with (
+        pytest.raises(ValueError, match="analysis-view digest did not match"),
+        factory(postgres_engine)() as unit,
+    ):
+        unit.assessments.insert(
+            replace(assessment, analysis_view_digest=Digest("c" * 64))
+        )
+
+    with (
+        pytest.raises(ValueError, match="different immutable content"),
+        factory(postgres_engine)() as unit,
+    ):
+        unit.assessments.insert(
+            replace(
+                assessment,
+                payload={"assessment_id": assessment_id, "verdict": "CHANGED"},
+                digest=Digest("c" * 64),
+            )
+        )
+
     with postgres_engine.connect() as connection:
         profile_count = connection.scalar(
             sa.select(sa.func.count()).select_from(preparedness_profile)
@@ -801,13 +831,33 @@ def test_profile_and_assessment_are_immutable_and_explicitly_linked(
             )
             == 1
         )
+        exact_binding = connection.execute(
+            sa.select(
+                preparedness_assessment.c.profile_id,
+                preparedness_assessment.c.profile_version,
+                preparedness_assessment.c.profile_digest_format,
+                preparedness_assessment.c.profile_digest_value,
+                preparedness_assessment.c.analysis_view_id,
+                preparedness_assessment.c.analysis_view_digest_format,
+                preparedness_assessment.c.analysis_view_digest_value,
+            ).where(preparedness_assessment.c.assessment_id == assessment_id)
+        ).one()
         assert (
-            connection.scalar(
-                sa.select(preparedness_assessment.c.profile_version).where(
-                    preparedness_assessment.c.assessment_id == assessment_id
-                )
-            )
-            == 1
+            str(exact_binding.profile_id),
+            exact_binding.profile_version,
+            exact_binding.profile_digest_format,
+            exact_binding.profile_digest_value,
+            str(exact_binding.analysis_view_id),
+            exact_binding.analysis_view_digest_format,
+            exact_binding.analysis_view_digest_value,
+        ) == (
+            str(profile_id),
+            1,
+            "jcs-sha256/v1",
+            "7" * 64,
+            str(view_id),
+            "jcs-sha256/v1",
+            "b" * 64,
         )
         assert (
             connection.scalar(
@@ -830,6 +880,7 @@ def test_profile_successor_validation_fails_closed(
         effective_from=NOW,
         predecessor_profile_id=None,
         predecessor_profile_version=None,
+        predecessor_digest=None,
         payload={"version": 1},
         digest=Digest("c" * 64),
     )
@@ -844,6 +895,7 @@ def test_profile_successor_validation_fails_closed(
                     effective_from=NOW + timedelta(seconds=1),
                     predecessor_profile_id=profile_id,
                     predecessor_profile_version=None,
+                    predecessor_digest=Digest("c" * 64),
                     payload={"version": 2},
                     digest=Digest("d" * 64),
                 )
@@ -857,6 +909,7 @@ def test_profile_successor_validation_fails_closed(
                     effective_from=NOW + timedelta(seconds=2),
                     predecessor_profile_id=profile_id,
                     predecessor_profile_version=2,
+                    predecessor_digest=Digest("e" * 64),
                     payload={"version": 3},
                     digest=Digest("e" * 64),
                 )
@@ -870,6 +923,7 @@ def test_profile_successor_validation_fails_closed(
                     effective_from=NOW + timedelta(seconds=1),
                     predecessor_profile_id=profile_id,
                     predecessor_profile_version=1,
+                    predecessor_digest=Digest("c" * 64),
                     payload={"version": 2},
                     digest=Digest("f" * 64),
                 )
@@ -883,8 +937,23 @@ def test_profile_successor_validation_fails_closed(
                     effective_from=NOW,
                     predecessor_profile_id=profile_id,
                     predecessor_profile_version=1,
+                    predecessor_digest=Digest("c" * 64),
                     payload={"version": 2},
                     digest=Digest("0" * 64),
+                )
+            )
+        with pytest.raises(ValueError, match="predecessor digest differs"):
+            unit.profiles.insert(
+                PreparednessProfileRecord(
+                    profile_id=profile_id,
+                    version=2,
+                    repository_id=5180,
+                    effective_from=NOW + timedelta(seconds=1),
+                    predecessor_profile_id=profile_id,
+                    predecessor_profile_version=1,
+                    predecessor_digest=Digest("1" * 64),
+                    payload={"version": 2},
+                    digest=Digest("2" * 64),
                 )
             )
         unit.rollback()

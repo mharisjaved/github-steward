@@ -445,13 +445,15 @@ production-readiness claim.
 The separately authorized local GS-I4 candidate implements the first
 profile-driven decision kernel over recorded or fake GitHub evidence. It seals
 a view only after bounded A/pass-1/B/pass-2/C semantic equality, applies one exact
-`PreparednessProfile` version at `evidence_sealed_at`, produces one deterministic
-`PreparednessAssessment`, persists immutable profile/assessment/evidence rows,
+`PreparednessProfile` ID/version/digest at `evidence_sealed_at`, produces one deterministic
+`PreparednessAssessment` bound to that profile digest and the exact analysis-view
+digest, persists immutable profile/assessment/evidence rows,
 and compares candidate evidence facet by facet before using the existing GS-I2
 current-pointer CAS.
 
 GS-I4 fixes status identity to Python `casefold()` without trimming or Unicode
-normalization, check identity to numeric producer application plus check name,
+normalization; original display casing is non-semantic provenance. It fixes
+check identity to numeric producer application plus check name,
 review identity to numeric reviewer and current-head history, and requested
 reviewer identity to numeric user/team IDs. Evidence uncertainty always
 precedes ordinary blockers. Replay does not change the pointer; regression,

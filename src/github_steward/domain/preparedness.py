@@ -24,7 +24,13 @@ PREPAREDNESS_PROFILE_SCHEMA_ID: Final = "github-steward/preparedness-profile/v1"
 PREPAREDNESS_ASSESSMENT_SCHEMA_ID: Final = "github-steward/preparedness-assessment/v1"
 PREPAREDNESS_FRESHNESS_SECONDS: Final = 600
 PREPAREDNESS_IDENTITY_NAMESPACE: Final = UUID("7a711868-68ca-5cab-bc89-2528753d43bc")
-ACCEPTED_CHECK_CONCLUSIONS: Final = frozenset({"neutral", "skipped", "success"})
+RECOGNIZED_SUCCESS_LIKE_CHECK_CONCLUSIONS: Final = frozenset(
+    {"neutral", "skipped", "success"}
+)
+# Compatibility name for callers that inspect the recognized vocabulary; the
+# evaluator uses each profile's configured subset, never this whole set.
+ACCEPTED_CHECK_CONCLUSIONS: Final = RECOGNIZED_SUCCESS_LIKE_CHECK_CONCLUSIONS
+ACCEPTED_COMMIT_STATUS_STATES: Final = ("success",)
 _KNOWN_UNSUCCESSFUL_CHECK_CONCLUSIONS: Final = frozenset(
     {
         "action_required",
@@ -137,6 +143,57 @@ class ProfileIdentity:
         return {"profile_id": str(self.profile_id), "version": self.version}
 
 
+@dataclass(frozen=True, slots=True)
+class ProfileReference:
+    """An exact immutable profile identity including its canonical digest."""
+
+    profile_id: UUID
+    version: int
+    digest: Digest
+
+    def __post_init__(self) -> None:
+        ProfileIdentity(self.profile_id, self.version)
+        if not isinstance(self.digest, Digest):
+            raise DomainValidationError("profile reference digest must be a Digest")
+
+    @property
+    def identity(self) -> ProfileIdentity:
+        return ProfileIdentity(self.profile_id, self.version)
+
+    def as_mapping(self) -> dict[str, object]:
+        return {
+            **self.identity.as_mapping(),
+            "digest": dict(self.digest.as_mapping()),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class AcquisitionConfigurationIdentity:
+    """The exact evidence-affecting configuration bound into one profile."""
+
+    version: int
+    digest: Digest
+    assessment_freshness_seconds: int = PREPAREDNESS_FRESHNESS_SECONDS
+
+    def __post_init__(self) -> None:
+        _positive_integer(self.version, "acquisition configuration version")
+        if not isinstance(self.digest, Digest):
+            raise DomainValidationError(
+                "acquisition configuration digest must be a Digest"
+            )
+        if self.assessment_freshness_seconds != PREPAREDNESS_FRESHNESS_SECONDS:
+            raise DomainValidationError(
+                "assessment freshness must be exactly 600 seconds"
+            )
+
+    def as_mapping(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "digest": dict(self.digest.as_mapping()),
+            "assessment_freshness_seconds": self.assessment_freshness_seconds,
+        }
+
+
 @dataclass(frozen=True, slots=True, order=True)
 class RequiredCheck:
     """One exact GitHub check identity."""
@@ -157,7 +214,7 @@ class RequiredCheck:
 
 @dataclass(frozen=True, slots=True, order=True)
 class RequiredStatus:
-    """One status requirement retaining its exact display context."""
+    """One status requirement retaining display spelling outside semantic payloads."""
 
     context: str
     context_key: str = ""
@@ -170,7 +227,7 @@ class RequiredStatus:
         object.__setattr__(self, "context_key", calculated)
 
     def as_mapping(self) -> dict[str, object]:
-        return {"context": self.context, "context_key": self.context_key}
+        return {"context_key": self.context_key}
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,24 +359,30 @@ class PreparednessProfile:
     repository_id: int
     required_checks: tuple[RequiredCheck, ...]
     required_statuses: tuple[RequiredStatus, ...]
-    block_on_changes_requested: bool
-    acquisition_configuration_digest: Digest
+    accepted_check_conclusions: tuple[str, ...]
+    block_on_current_head_changes_requested: bool
+    acquisition_configuration: AcquisitionConfigurationIdentity
     effective_from: datetime
-    predecessor: ProfileIdentity | None = None
+    predecessor: ProfileReference | None = None
 
     def __post_init__(self) -> None:
         identity = ProfileIdentity(self.profile_id, self.version)
         _positive_integer(self.repository_id, "repository_id")
-        if not isinstance(self.block_on_changes_requested, bool):
-            raise DomainValidationError("block_on_changes_requested must be boolean")
-        if not isinstance(self.acquisition_configuration_digest, Digest):
+        if not isinstance(self.block_on_current_head_changes_requested, bool):
             raise DomainValidationError(
-                "acquisition_configuration_digest must be a Digest"
+                "block_on_current_head_changes_requested must be boolean"
+            )
+        if not isinstance(
+            self.acquisition_configuration, AcquisitionConfigurationIdentity
+        ):
+            raise DomainValidationError(
+                "acquisition_configuration must be an AcquisitionConfigurationIdentity"
             )
         _utc_datetime(self.effective_from, "effective_from")
 
         checks = tuple(self.required_checks)
         statuses = tuple(self.required_statuses)
+        conclusions = tuple(self.accepted_check_conclusions)
         if not all(isinstance(item, RequiredCheck) for item in checks):
             raise DomainValidationError("required_checks must contain RequiredCheck")
         if not all(isinstance(item, RequiredStatus) for item in statuses):
@@ -331,25 +394,54 @@ class PreparednessProfile:
             raise DomainValidationError(
                 "required status context_key identities must be unique"
             )
+        if not conclusions:
+            raise DomainValidationError("accepted_check_conclusions must not be empty")
+        if not all(isinstance(item, str) and item != "" for item in conclusions):
+            raise DomainValidationError(
+                "accepted_check_conclusions must contain non-empty strings"
+            )
+        if len(set(conclusions)) != len(conclusions):
+            raise DomainValidationError(
+                "accepted_check_conclusions must not contain duplicates"
+            )
+        unknown = set(conclusions) - RECOGNIZED_SUCCESS_LIKE_CHECK_CONCLUSIONS
+        if unknown:
+            raise DomainValidationError(
+                "accepted_check_conclusions contains an unknown or blocking conclusion"
+            )
         object.__setattr__(self, "required_checks", tuple(sorted(checks)))
-        object.__setattr__(self, "required_statuses", tuple(sorted(statuses)))
+        object.__setattr__(
+            self,
+            "required_statuses",
+            tuple(sorted(statuses, key=lambda item: item.context_key)),
+        )
+        object.__setattr__(
+            self, "accepted_check_conclusions", tuple(sorted(conclusions))
+        )
 
         if identity.version == 1:
             if self.predecessor is not None:
                 raise DomainValidationError(
                     "profile version 1 must not identify a predecessor"
                 )
-        elif self.predecessor != ProfileIdentity(
-            identity.profile_id, identity.version - 1
+        elif (
+            self.predecessor is None
+            or self.predecessor.profile_id != identity.profile_id
+            or self.predecessor.version != identity.version - 1
         ):
             raise DomainValidationError(
-                "profile predecessor must be the immediately preceding version "
-                "of the same logical UUID"
+                "profile predecessor must be the immediately preceding exact "
+                "reference of the same logical UUID"
             )
 
     @property
     def identity(self) -> ProfileIdentity:
         return ProfileIdentity(self.profile_id, self.version)
+
+    def reference(self, digest: Digest) -> ProfileReference:
+        """Bind this digest-free semantic profile to its canonical digest."""
+
+        return ProfileReference(self.profile_id, self.version, digest)
 
     def applies_at(
         self,
@@ -357,7 +449,7 @@ class PreparednessProfile:
         *,
         successor_effective_from: datetime | None = None,
     ) -> bool:
-        """Apply the exact ``[effective_from, successor.effective_from)`` interval."""
+        """Apply the exact half-open profile interval."""
 
         sealed = _utc_datetime(evidence_sealed_at, "evidence_sealed_at")
         if successor_effective_from is not None:
@@ -381,15 +473,14 @@ class PreparednessProfile:
             "required_commit_statuses": [
                 item.as_mapping() for item in self.required_statuses
             ],
+            "accepted_commit_status_states": list(ACCEPTED_COMMIT_STATUS_STATES),
+            "accepted_check_conclusions": list(self.accepted_check_conclusions),
             "review_policy": {
                 "block_on_current_head_changes_requested": (
-                    self.block_on_changes_requested
+                    self.block_on_current_head_changes_requested
                 )
             },
-            "acquisition_configuration_digest": dict(
-                self.acquisition_configuration_digest.as_mapping()
-            ),
-            "freshness_window_seconds": PREPAREDNESS_FRESHNESS_SECONDS,
+            "acquisition_configuration": self.acquisition_configuration.as_mapping(),
             "effective_from": _timestamp_text(self.effective_from),
             "predecessor": (
                 None if self.predecessor is None else self.predecessor.as_mapping()
@@ -409,9 +500,10 @@ class PreparednessProfile:
                 "repository_id",
                 "required_checks",
                 "required_commit_statuses",
+                "accepted_commit_status_states",
+                "accepted_check_conclusions",
                 "review_policy",
-                "acquisition_configuration_digest",
-                "freshness_window_seconds",
+                "acquisition_configuration",
                 "effective_from",
                 "predecessor",
             },
@@ -423,9 +515,17 @@ class PreparednessProfile:
             raise DomainValidationError(
                 f"preparedness profile digest_algorithm must be {DIGEST_FORMAT}"
             )
-        if value["freshness_window_seconds"] != PREPAREDNESS_FRESHNESS_SECONDS:
+        if (
+            tuple(
+                _sequence(
+                    value["accepted_commit_status_states"],
+                    "accepted_commit_status_states",
+                )
+            )
+            != ACCEPTED_COMMIT_STATUS_STATES
+        ):
             raise DomainValidationError(
-                "preparedness profile freshness window must be 600 seconds"
+                "accepted commit-status states must be exactly ['success']"
             )
 
         identity = _mapping(value["identity"], "profile identity")
@@ -453,15 +553,20 @@ class PreparednessProfile:
         statuses: list[RequiredStatus] = []
         for item in statuses_value:
             status = _mapping(item, "required status")
-            _exact_keys(status, {"context", "context_key"}, "required status")
+            _exact_keys(status, {"context_key"}, "required status")
+            context_key = _nonempty_text(status["context_key"], "status context_key")
             statuses.append(
-                RequiredStatus(
-                    context=_nonempty_text(status["context"], "status context"),
-                    context_key=_nonempty_text(
-                        status["context_key"], "status context_key"
-                    ),
-                )
+                RequiredStatus(context=context_key, context_key=context_key)
             )
+
+        conclusions_value = _sequence(
+            value["accepted_check_conclusions"],
+            "accepted_check_conclusions",
+        )
+        conclusions = tuple(
+            _nonempty_text(item, "accepted check conclusion")
+            for item in conclusions_value
+        )
 
         review_policy = _mapping(value["review_policy"], "review_policy")
         _exact_keys(
@@ -475,50 +580,47 @@ class PreparednessProfile:
                 "block_on_current_head_changes_requested must be boolean"
             )
 
-        digest_value = _mapping(
-            value["acquisition_configuration_digest"],
-            "acquisition_configuration_digest",
+        configuration_value = _mapping(
+            value["acquisition_configuration"],
+            "acquisition_configuration",
         )
         _exact_keys(
-            digest_value,
-            {"format", "value"},
-            "acquisition_configuration_digest",
+            configuration_value,
+            {"version", "digest", "assessment_freshness_seconds"},
+            "acquisition_configuration",
         )
-        digest = Digest(
-            format=_nonempty_text(digest_value["format"], "digest format"),
-            value=_nonempty_text(digest_value["value"], "digest value"),
+        configuration = AcquisitionConfigurationIdentity(
+            version=_positive_integer(
+                configuration_value["version"],
+                "acquisition configuration version",
+            ),
+            digest=_digest_from_mapping(
+                configuration_value["digest"],
+                "acquisition configuration digest",
+            ),
+            assessment_freshness_seconds=_positive_integer(
+                configuration_value["assessment_freshness_seconds"],
+                "assessment freshness seconds",
+            ),
         )
 
         effective_from = _timestamp_from_text(value["effective_from"], "effective_from")
         predecessor_value = value["predecessor"]
-        predecessor: ProfileIdentity | None
-        if predecessor_value is None:
-            predecessor = None
-        else:
-            predecessor_mapping = _mapping(predecessor_value, "predecessor")
-            _exact_keys(
-                predecessor_mapping,
-                {"profile_id", "version"},
-                "predecessor",
-            )
-            predecessor = ProfileIdentity(
-                profile_id=_uuid(
-                    predecessor_mapping["profile_id"], "predecessor profile_id"
-                ),
-                version=_positive_integer(
-                    predecessor_mapping["version"], "predecessor version"
-                ),
-            )
+        predecessor = (
+            None
+            if predecessor_value is None
+            else _profile_reference_from_mapping(predecessor_value, "predecessor")
+        )
 
-        repository_id = _positive_integer(value["repository_id"], "repository_id")
         return cls(
             profile_id=profile_id,
             version=version,
-            repository_id=repository_id,
+            repository_id=_positive_integer(value["repository_id"], "repository_id"),
             required_checks=tuple(checks),
             required_statuses=tuple(statuses),
-            block_on_changes_requested=blocking,
-            acquisition_configuration_digest=digest,
+            accepted_check_conclusions=conclusions,
+            block_on_current_head_changes_requested=blocking,
+            acquisition_configuration=configuration,
             effective_from=effective_from,
             predecessor=predecessor,
         )
@@ -527,10 +629,12 @@ class PreparednessProfile:
 def validate_profile_successor(
     predecessor: PreparednessProfile,
     successor: PreparednessProfile,
+    *,
+    predecessor_digest: Digest,
 ) -> None:
     """Validate one exact linear profile succession edge."""
 
-    if successor.predecessor != predecessor.identity:
+    if successor.predecessor != predecessor.reference(predecessor_digest):
         raise DomainValidationError("successor does not identify the exact predecessor")
     if successor.effective_from <= predecessor.effective_from:
         raise DomainValidationError(
@@ -625,7 +729,7 @@ class PreparednessAssessment:
     """Exact deterministic PreparednessAssessment v1 value."""
 
     identity: PullRequestIdentity
-    profile: ProfileIdentity
+    profile: ProfileReference
     analysis_view_id: str
     analysis_view_digest: Digest
     evidence_sealed_at: datetime
@@ -638,8 +742,8 @@ class PreparednessAssessment:
     def __post_init__(self) -> None:
         if not isinstance(self.identity, PullRequestIdentity):
             raise DomainValidationError("identity must be a PullRequestIdentity")
-        if not isinstance(self.profile, ProfileIdentity):
-            raise DomainValidationError("profile must be an explicit ProfileIdentity")
+        if not isinstance(self.profile, ProfileReference):
+            raise DomainValidationError("profile must be an exact ProfileReference")
         _nonempty_text(self.analysis_view_id, "analysis_view_id")
         if not isinstance(self.analysis_view_digest, Digest):
             raise DomainValidationError("analysis_view_digest must be a Digest")
@@ -712,6 +816,7 @@ def assess_preparedness(
     evidence: PreparednessEvidence,
     evaluated_at: datetime,
     *,
+    profile_reference: ProfileReference,
     successor_effective_from: datetime | None = None,
 ) -> PreparednessAssessment:
     """Evaluate one explicit profile against one sealed coherent evidence view."""
@@ -720,6 +825,10 @@ def assess_preparedness(
         raise DomainValidationError("profile must be an explicit PreparednessProfile")
     if not isinstance(evidence, PreparednessEvidence):
         raise DomainValidationError("evidence must be PreparednessEvidence")
+    if not isinstance(profile_reference, ProfileReference):
+        raise DomainValidationError("profile_reference must be exact")
+    if profile_reference.identity != profile.identity:
+        raise DomainValidationError("profile reference identity did not match profile")
     evaluated = _utc_datetime(evaluated_at, "evaluated_at")
     freshness = evaluate_freshness(evidence.evidence_sealed_at, evaluated)
 
@@ -727,6 +836,7 @@ def assess_preparedness(
         profile.required_checks,
         evidence.checks,
         evidence.observed_identity.head_sha,
+        frozenset(profile.accepted_check_conclusions),
     )
     status_summary, status_blockers, status_ambiguous = _reduce_statuses(
         profile.required_statuses,
@@ -740,7 +850,7 @@ def assess_preparedness(
 
     identity_matches = evidence.expected_identity == evidence.observed_identity
     configuration_matches = (
-        profile.acquisition_configuration_digest
+        profile.acquisition_configuration.digest
         == evidence.acquisition_configuration_digest
     )
     profile_repository_matches = (
@@ -784,7 +894,7 @@ def assess_preparedness(
         blockers.add(PreparednessReasonCode.PR_CLOSED)
     if evidence.draft:
         blockers.add(PreparednessReasonCode.PR_DRAFT)
-    if profile.block_on_changes_requested and review_blocked:
+    if profile.block_on_current_head_changes_requested and review_blocked:
         blockers.add(PreparednessReasonCode.CURRENT_HEAD_CHANGES_REQUESTED)
 
     if uncertainty:
@@ -814,11 +924,12 @@ def assess_preparedness(
         "required_checks": check_summary,
         "required_commit_statuses": status_summary,
         "current_head_review_opinions": review_summary,
-        "review_blocking_policy": profile.block_on_changes_requested,
+        "review_blocking_policy": (profile.block_on_current_head_changes_requested),
+        "accepted_check_conclusions": list(profile.accepted_check_conclusions),
     }
     return PreparednessAssessment(
         identity=evidence.observed_identity,
-        profile=profile.identity,
+        profile=profile_reference,
         analysis_view_id=evidence.analysis_view_id,
         analysis_view_digest=evidence.analysis_view_digest,
         evidence_sealed_at=evidence.evidence_sealed_at,
@@ -834,6 +945,7 @@ def _reduce_checks(
     required: Sequence[RequiredCheck],
     checks: Sequence[CheckRunEvidence],
     head_sha: str,
+    accepted_conclusions: frozenset[str],
 ) -> tuple[list[dict[str, object]], set[PreparednessReasonCode], bool]:
     unique: dict[int, CheckRunEvidence] = {}
     ambiguous = False
@@ -889,9 +1001,12 @@ def _reduce_checks(
                 blockers.add(PreparednessReasonCode.REQUIRED_CHECK_PENDING)
                 item["outcome"] = PreparednessReasonCode.REQUIRED_CHECK_PENDING.value
         elif selected.status == "completed":
-            if selected.conclusion in ACCEPTED_CHECK_CONCLUSIONS:
+            if selected.conclusion in accepted_conclusions:
                 item["outcome"] = "SATISFIED"
-            elif selected.conclusion in _KNOWN_UNSUCCESSFUL_CHECK_CONCLUSIONS:
+            elif selected.conclusion in (
+                RECOGNIZED_SUCCESS_LIKE_CHECK_CONCLUSIONS
+                | _KNOWN_UNSUCCESSFUL_CHECK_CONCLUSIONS
+            ):
                 blockers.add(PreparednessReasonCode.REQUIRED_CHECK_UNSUCCESSFUL)
                 item["outcome"] = (
                     PreparednessReasonCode.REQUIRED_CHECK_UNSUCCESSFUL.value
@@ -948,7 +1063,7 @@ def _reduce_statuses(
             item.update(
                 {
                     "selected_status_id": selected.status_id,
-                    "selected_context": selected.context,
+                    "selected_context_key": selected.context_key,
                     "state": selected.state,
                 }
             )
@@ -1122,6 +1237,28 @@ def _sequence(value: object, field: str) -> Sequence[object]:
     if not isinstance(value, (list, tuple)):
         raise DomainValidationError(f"{field} must be an array")
     return value
+
+
+def _digest_from_mapping(value: object, field: str) -> Digest:
+    mapping = _mapping(value, field)
+    _exact_keys(mapping, {"format", "value"}, field)
+    return Digest(
+        format=_nonempty_text(mapping["format"], f"{field} format"),
+        value=_nonempty_text(mapping["value"], f"{field} value"),
+    )
+
+
+def _profile_reference_from_mapping(
+    value: object,
+    field: str,
+) -> ProfileReference:
+    mapping = _mapping(value, field)
+    _exact_keys(mapping, {"profile_id", "version", "digest"}, field)
+    return ProfileReference(
+        profile_id=_uuid(mapping["profile_id"], f"{field} profile_id"),
+        version=_positive_integer(mapping["version"], f"{field} version"),
+        digest=_digest_from_mapping(mapping["digest"], f"{field} digest"),
+    )
 
 
 def _exact_keys(

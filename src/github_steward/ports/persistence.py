@@ -183,6 +183,7 @@ class PreparednessProfileRecord:
     effective_from: datetime
     predecessor_profile_id: PreparednessProfileId | None
     predecessor_profile_version: int | None
+    predecessor_digest: Digest | None
     payload: CanonicalValue
     digest: Digest
 
@@ -195,6 +196,7 @@ class PreparednessProfileRecord:
         effective_from: datetime,
         predecessor_profile_id: PreparednessProfileId | None,
         predecessor_profile_version: int | None,
+        predecessor_digest: Digest | None,
         payload: object,
         digest: Digest,
     ) -> None:
@@ -212,6 +214,7 @@ class PreparednessProfileRecord:
             "predecessor_profile_version",
             predecessor_profile_version,
         )
+        object.__setattr__(self, "predecessor_digest", predecessor_digest)
         object.__setattr__(self, "payload", freeze_canonical_value(payload))
         object.__setattr__(self, "digest", digest)
 
@@ -226,7 +229,9 @@ class PreparednessAssessmentRecord:
     head_sha: str
     profile_id: PreparednessProfileId
     profile_version: int
+    profile_digest: Digest
     analysis_view_id: AnalysisViewId
+    analysis_view_digest: Digest
     evidence_sealed_at: datetime
     evaluated_at: datetime
     verdict: str
@@ -243,7 +248,9 @@ class PreparednessAssessmentRecord:
         head_sha: str,
         profile_id: PreparednessProfileId,
         profile_version: int,
+        profile_digest: Digest,
         analysis_view_id: AnalysisViewId,
+        analysis_view_digest: Digest,
         evidence_sealed_at: datetime,
         evaluated_at: datetime,
         verdict: str,
@@ -257,7 +264,9 @@ class PreparednessAssessmentRecord:
         object.__setattr__(self, "head_sha", head_sha)
         object.__setattr__(self, "profile_id", profile_id)
         object.__setattr__(self, "profile_version", profile_version)
+        object.__setattr__(self, "profile_digest", profile_digest)
         object.__setattr__(self, "analysis_view_id", analysis_view_id)
+        object.__setattr__(self, "analysis_view_digest", analysis_view_digest)
         object.__setattr__(self, "evidence_sealed_at", evidence_sealed_at)
         object.__setattr__(self, "evaluated_at", evaluated_at)
         object.__setattr__(self, "verdict", verdict)

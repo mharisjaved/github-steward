@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import pathlib
 import re
+import subprocess
 import tomllib
 from collections.abc import Iterator
 
@@ -16,6 +17,50 @@ from github_steward.adapters.postgres.metadata import (
 
 ROOT = pathlib.Path(__file__).parents[2]
 SRC = ROOT / "src" / "github_steward"
+GS_I4_BASELINE = "87feabb3b9ef6c4470c98b95b52319a5128d58f4"
+GS_I4_ALLOWED_PATHS = frozenset(
+    {
+        "README.md",
+        ".afef/project-manifest.yaml",
+        ".afef/specifications/gs-architecture-baseline.md",
+        ".afef/specifications/gs-d2-production-architecture.md",
+        ".afef/specifications/gs-i4-deterministic-preparedness.md",
+        ".afef/work-records/gs-a0-adoption.yaml",
+        ".afef/work-records/gs-i4.yaml",
+        "src/github_steward/domain/__init__.py",
+        "src/github_steward/domain/acquisition.py",
+        "src/github_steward/domain/errors.py",
+        "src/github_steward/domain/preparedness.py",
+        "src/github_steward/application/__init__.py",
+        "src/github_steward/application/public_acquisition.py",
+        "src/github_steward/application/local_processing.py",
+        "src/github_steward/application/preparedness.py",
+        "src/github_steward/ports/__init__.py",
+        "src/github_steward/ports/github.py",
+        "src/github_steward/ports/persistence.py",
+        "src/github_steward/adapters/github/__init__.py",
+        "src/github_steward/adapters/github/public_rest.py",
+        "src/github_steward/adapters/postgres/__init__.py",
+        "src/github_steward/adapters/postgres/metadata.py",
+        "src/github_steward/adapters/postgres/repositories.py",
+        "src/github_steward/adapters/postgres/unit_of_work.py",
+        "migrations/versions/0003_gs_i4_preparedness.py",
+        "tests/architecture/test_boundaries.py",
+        "tests/contract/test_repository_ports.py",
+        "tests/contract/test_preparedness_properties.py",
+        "tests/unit/domain/test_acquisition.py",
+        "tests/unit/domain/test_preparedness.py",
+        "tests/unit/application/test_public_acquisition.py",
+        "tests/unit/application/test_preparedness.py",
+        "tests/unit/adapters/test_public_github.py",
+        "tests/integration/postgres/test_public_acquisition_postgres.py",
+        "tests/integration/postgres/test_preparedness_postgres.py",
+        "tests/integration/postgres/test_repositories.py",
+        "tests/integration/postgres/test_concurrency.py",
+        "tests/integration/postgres/test_schema_invariants.py",
+        "tests/integration/postgres/test_migrations.py",
+    }
+)
 
 
 def _imports(path: pathlib.Path) -> Iterator[str]:
@@ -183,3 +228,24 @@ def test_dependency_categories_are_bounded() -> None:
             "default": True,
         }
     ]
+
+
+def test_gs_i4_baseline_diff_uses_only_the_accepted_path_whitelist() -> None:
+    changed = subprocess.run(
+        ["git", "diff", "--name-only", GS_I4_BASELINE, "--"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    gs_i4_paths = set(changed) | set(untracked)
+
+    assert len(gs_i4_paths) <= 40
+    assert gs_i4_paths <= GS_I4_ALLOWED_PATHS

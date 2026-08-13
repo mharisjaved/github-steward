@@ -34,9 +34,14 @@ The local GS-I4 candidate adds credential-free recorded/fake coherent
 acquisition, exact
 `PreparednessProfile` and `PreparednessAssessment` v1 values, normalized status,
 check, review, and requested-reviewer evidence, facet-aware source ordering, and
-immutable preparedness persistence. Freshness is based on the sealed evidence
-time with a fixed 600-second inclusive window. Only proven source progression
-may advance the existing versioned observation pointer.
+immutable preparedness persistence. Every assessment request names the exact
+profile ID/version/digest and persists that binding together with the exact
+analysis-view ID/digest. Profiles bind their accepted check-conclusion subset,
+configuration version/digest, and 600-second assessment-freshness window.
+Commit-status semantics use only `context.casefold()`; display casing remains
+provenance and cannot advance the pointer. Freshness is based on the sealed
+evidence time with a fixed 600-second inclusive window. Only proven source
+progression may advance the existing versioned observation pointer.
 
 The canonicalization API accepts constructed Python values and does not parse
 JSON text or bytes. Duplicate member names in raw JSON are therefore not

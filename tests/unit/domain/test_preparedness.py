@@ -18,6 +18,7 @@ from github_steward.domain.preparedness import (
     PREPAREDNESS_ASSESSMENT_SCHEMA_ID,
     PREPAREDNESS_FRESHNESS_SECONDS,
     PREPAREDNESS_PROFILE_SCHEMA_ID,
+    AcquisitionConfigurationIdentity,
     CheckRunEvidence,
     CommitStatusEvidence,
     FreshnessResult,
@@ -27,6 +28,7 @@ from github_steward.domain.preparedness import (
     PreparednessReasonCode,
     PreparednessVerdict,
     ProfileIdentity,
+    ProfileReference,
     PullRequestIdentity,
     RequiredCheck,
     RequiredStatus,
@@ -44,6 +46,7 @@ OTHER_HEAD = "b" * 40
 BASE = "c" * 40
 CONFIG_DIGEST = Digest("1" * 64)
 VIEW_DIGEST = Digest("2" * 64)
+PROFILE_DIGEST = Digest("3" * 64)
 
 
 def _identity(
@@ -76,7 +79,10 @@ def _profile(
     digest: Digest = CONFIG_DIGEST,
     repository_id: int = 101,
     version: int = 1,
-    predecessor: ProfileIdentity | None = None,
+    predecessor: ProfileReference | None = None,
+    accepted_check_conclusions: tuple[str, ...] = tuple(
+        sorted(ACCEPTED_CHECK_CONCLUSIONS)
+    ),
 ) -> PreparednessProfile:
     return PreparednessProfile(
         profile_id=PROFILE_ID,
@@ -84,8 +90,9 @@ def _profile(
         repository_id=repository_id,
         required_checks=required_checks,
         required_statuses=required_statuses,
-        block_on_changes_requested=blocking,
-        acquisition_configuration_digest=digest,
+        accepted_check_conclusions=accepted_check_conclusions,
+        block_on_current_head_changes_requested=blocking,
+        acquisition_configuration=AcquisitionConfigurationIdentity(1, digest),
         effective_from=effective_from,
         predecessor=predecessor,
     )
@@ -190,10 +197,12 @@ def _assess(
     evaluated_at: datetime = NOW,
     successor_effective_from: datetime | None = None,
 ) -> PreparednessAssessment:
+    selected_profile = profile or _profile()
     return assess_preparedness(
-        profile or _profile(),
+        selected_profile,
         evidence or _evidence(),
         evaluated_at,
+        profile_reference=selected_profile.reference(PROFILE_DIGEST),
         successor_effective_from=successor_effective_from,
     )
 
@@ -214,7 +223,13 @@ def test_profile_exact_payload_is_deterministic_and_round_trips() -> None:
     assert payload == PreparednessProfile.from_mapping(deepcopy(payload)).as_mapping()
     assert payload["schema"] == PREPAREDNESS_PROFILE_SCHEMA_ID
     assert payload["digest_algorithm"] == DIGEST_FORMAT
-    assert payload["freshness_window_seconds"] == PREPAREDNESS_FRESHNESS_SECONDS
+    assert payload["acquisition_configuration"] == {
+        "version": 1,
+        "digest": dict(CONFIG_DIGEST.as_mapping()),
+        "assessment_freshness_seconds": PREPAREDNESS_FRESHNESS_SECONDS,
+    }
+    assert payload["accepted_commit_status_states"] == ["success"]
+    assert payload["accepted_check_conclusions"] == ["neutral", "skipped", "success"]
     assert payload["identity"] == {
         "profile_id": str(PROFILE_ID),
         "version": 1,
@@ -224,8 +239,8 @@ def test_profile_exact_payload_is_deterministic_and_round_trips() -> None:
         {"producer_app_id": 9, "check_name": "lint"},
     ]
     assert payload["required_commit_statuses"] == [
-        {"context": " CI ", "context_key": " ci "},
-        {"context": "Straße", "context_key": "strasse"},
+        {"context_key": " ci "},
+        {"context_key": "strasse"},
     ]
     assert payload["effective_from"] == "2026-08-10T12:00:00.000000Z"
     assert payload["predecessor"] is None
@@ -256,23 +271,81 @@ def test_profile_rejects_casefold_duplicate_statuses_and_duplicate_checks() -> N
         _profile(required_checks=(RequiredCheck(7, "build"), RequiredCheck(7, "build")))
 
 
+def test_profile_policy_binds_configured_success_like_check_conclusions() -> None:
+    success_only = _profile(accepted_check_conclusions=("success",))
+    neutral_only = _profile(accepted_check_conclusions=("neutral",))
+
+    assert success_only.as_mapping() != neutral_only.as_mapping()
+    neutral_evidence = _evidence(checks=(_check(conclusion="neutral"),))
+    assert (
+        _assess(
+            profile=neutral_only,
+            evidence=neutral_evidence,
+        ).verdict
+        is PreparednessVerdict.READY_FOR_HUMAN_REVIEW
+    )
+    success_only_assessment = _assess(
+        profile=success_only,
+        evidence=neutral_evidence,
+    )
+    assert success_only_assessment.verdict is PreparednessVerdict.NOT_READY
+    assert success_only_assessment.reason_codes == (
+        PreparednessReasonCode.REQUIRED_CHECK_UNSUCCESSFUL,
+    )
+
+
+@pytest.mark.parametrize(
+    "conclusions",
+    [(), ("success", "success"), ("failure",), ("unknown",)],
+)
+def test_profile_rejects_invalid_accepted_check_conclusion_configuration(
+    conclusions: tuple[str, ...],
+) -> None:
+    with pytest.raises(DomainValidationError, match="accepted_check_conclusions"):
+        _profile(accepted_check_conclusions=conclusions)
+
+
+def test_profile_status_requirement_casing_is_semantically_canonical() -> None:
+    upper = _profile(required_statuses=(RequiredStatus("CI/Test"),))
+    lower = _profile(required_statuses=(RequiredStatus("ci/test"),))
+    assert upper.as_mapping() == lower.as_mapping()
+
+    ready = _assess(
+        profile=upper,
+        evidence=_evidence(statuses=(_status(context="ci/test"),)),
+    )
+    assert ready.verdict is PreparednessVerdict.READY_FOR_HUMAN_REVIEW
+
+
+def test_assessment_payload_binds_exact_profile_digest() -> None:
+    assessment = _assess()
+    changed = replace(
+        assessment,
+        profile=ProfileReference(PROFILE_ID, 1, Digest("4" * 64)),
+    )
+    assert assessment.as_mapping() != changed.as_mapping()
+
+
 def test_profile_versions_require_exact_linear_predecessor() -> None:
     predecessor = _profile()
+    predecessor_reference = predecessor.reference(PROFILE_DIGEST)
     successor = _profile(
         version=2,
-        predecessor=predecessor.identity,
+        predecessor=predecessor_reference,
         effective_from=NOW,
     )
 
-    validate_profile_successor(predecessor, successor)
-    assert successor.as_mapping()["predecessor"] == predecessor.identity.as_mapping()
+    validate_profile_successor(
+        predecessor, successor, predecessor_digest=PROFILE_DIGEST
+    )
+    assert successor.as_mapping()["predecessor"] == predecessor_reference.as_mapping()
 
     with pytest.raises(DomainValidationError, match="version 1"):
-        _profile(predecessor=ProfileIdentity(PROFILE_ID, 1))
+        _profile(predecessor=predecessor_reference)
     with pytest.raises(DomainValidationError, match="immediately preceding"):
         _profile(
             version=3,
-            predecessor=ProfileIdentity(PROFILE_ID, 1),
+            predecessor=predecessor_reference,
             effective_from=NOW,
         )
     with pytest.raises(DomainValidationError, match="exact predecessor"):
@@ -282,16 +355,29 @@ def test_profile_versions_require_exact_linear_predecessor() -> None:
             replace(
                 successor,
                 profile_id=other_id,
-                predecessor=ProfileIdentity(other_id, 1),
+                predecessor=ProfileReference(other_id, 1, PROFILE_DIGEST),
             ),
+            predecessor_digest=PROFILE_DIGEST,
         )
     with pytest.raises(DomainValidationError, match="later than predecessor"):
         validate_profile_successor(
             predecessor,
             replace(successor, effective_from=predecessor.effective_from),
+            predecessor_digest=PROFILE_DIGEST,
         )
     with pytest.raises(DomainValidationError, match="repository identity"):
-        validate_profile_successor(predecessor, replace(successor, repository_id=999))
+        validate_profile_successor(
+            predecessor,
+            replace(successor, repository_id=999),
+            predecessor_digest=PROFILE_DIGEST,
+        )
+
+    with pytest.raises(DomainValidationError, match="exact predecessor"):
+        validate_profile_successor(
+            predecessor,
+            successor,
+            predecessor_digest=Digest("4" * 64),
+        )
 
 
 def test_profile_applicability_uses_half_open_sealed_time_interval() -> None:
@@ -337,7 +423,10 @@ def test_ready_assessment_has_exact_explicit_identity_and_schema_content() -> No
     assert identity["pull_request_id"] == 202
     assert identity["pull_number"] == 17
     assert identity["head_sha"] == HEAD
-    assert identity["profile"] == _profile().identity.as_mapping()
+    assert (
+        identity["profile"]
+        == ProfileReference(PROFILE_ID, 1, PROFILE_DIGEST).as_mapping()
+    )
     assert payload["evidence_sealed_at"] == "2026-08-11T12:00:00.000000Z"
     assert payload["evaluated_at"] == "2026-08-11T12:00:00.000000Z"
     assert payload["freshness"] == "FRESH"
@@ -664,9 +753,8 @@ def test_status_context_casefold_and_latest_remote_watermark_selection() -> None
     item = cast(
         list[dict[str, object]], _summary(assessment)["required_commit_statuses"]
     )[0]
-    assert item["context"] == "Straße"
     assert item["context_key"] == "strasse"
-    assert item["selected_context"] == "strasse"
+    assert item["selected_context_key"] == "strasse"
     assert item["selected_status_id"] == 1
 
 
@@ -872,9 +960,11 @@ def test_profile_parser_rejects_non_exact_persisted_payloads() -> None:
     wrong_algorithm = deepcopy(payload)
     wrong_algorithm["digest_algorithm"] = "sha256"
     invalid_values.append(wrong_algorithm)
-    wrong_window = deepcopy(payload)
-    wrong_window["freshness_window_seconds"] = 599
-    invalid_values.append(wrong_window)
+    wrong_freshness = deepcopy(payload)
+    cast(dict[str, object], wrong_freshness["acquisition_configuration"])[
+        "assessment_freshness_seconds"
+    ] = 599
+    invalid_values.append(wrong_freshness)
     wrong_time = deepcopy(payload)
     wrong_time["effective_from"] = "2026-08-10T12:00:00Z"
     invalid_values.append(wrong_time)
@@ -886,7 +976,7 @@ def test_profile_parser_rejects_non_exact_persisted_payloads() -> None:
     wrong_status_key = deepcopy(payload)
     cast(list[dict[str, object]], wrong_status_key["required_commit_statuses"])[0][
         "context_key"
-    ] = "different"
+    ] = "DIFFERENT"
     invalid_values.append(wrong_status_key)
 
     for invalid in invalid_values:
@@ -897,20 +987,32 @@ def test_profile_parser_rejects_non_exact_persisted_payloads() -> None:
 def test_profile_parser_round_trips_a_successor_predecessor_reference() -> None:
     successor = _profile(
         version=2,
-        predecessor=ProfileIdentity(PROFILE_ID, 1),
+        predecessor=ProfileReference(PROFILE_ID, 1, PROFILE_DIGEST),
         effective_from=NOW,
     )
-    assert PreparednessProfile.from_mapping(successor.as_mapping()) == successor
+    parsed = PreparednessProfile.from_mapping(successor.as_mapping())
+    assert parsed.as_mapping() == successor.as_mapping()
 
 
 def test_profile_and_persisted_parser_validation_guards_fail_closed() -> None:
     profile = _profile()
     invalid_profiles = (
         lambda: ProfileIdentity(cast(UUID, "not-a-uuid"), 1),
-        lambda: replace(profile, block_on_changes_requested=cast(bool, 1)),
+        lambda: ProfileReference(PROFILE_ID, 1, cast(Digest, "not-a-digest")),
+        lambda: AcquisitionConfigurationIdentity(
+            1,
+            cast(Digest, "not-a-digest"),
+        ),
         lambda: replace(
             profile,
-            acquisition_configuration_digest=cast(Digest, "not-a-digest"),
+            block_on_current_head_changes_requested=cast(bool, 1),
+        ),
+        lambda: replace(
+            profile,
+            acquisition_configuration=cast(
+                AcquisitionConfigurationIdentity,
+                "not-a-configuration",
+            ),
         ),
         lambda: replace(
             profile,
@@ -919,6 +1021,10 @@ def test_profile_and_persisted_parser_validation_guards_fail_closed() -> None:
         lambda: replace(
             profile,
             required_statuses=cast(tuple[RequiredStatus, ...], ("not-a-status",)),
+        ),
+        lambda: replace(
+            profile,
+            accepted_check_conclusions=cast(tuple[str, ...], (1,)),
         ),
         lambda: replace(_status(), context_key="not-casefolded"),
     )
@@ -935,6 +1041,7 @@ def test_profile_and_persisted_parser_validation_guards_fail_closed() -> None:
         invalid_payload(review_policy={"block_on_current_head_changes_requested": 1}),
         invalid_payload(identity=[]),
         invalid_payload(required_checks={}),
+        invalid_payload(accepted_commit_status_states=["pending"]),
         invalid_payload(effective_from=1),
         invalid_payload(effective_from="2026-08-10T12:00:00.0Z"),
         invalid_payload(identity={"profile_id": 1, "version": 1}),
@@ -994,7 +1101,7 @@ def test_evidence_assessment_and_evaluator_type_guards_fail_closed() -> None:
         ),
         lambda: replace(
             assessment,
-            profile=cast(ProfileIdentity, "wrong"),
+            profile=cast(ProfileReference, "wrong"),
         ),
         lambda: replace(
             assessment,
@@ -1018,9 +1125,37 @@ def test_evidence_assessment_and_evaluator_type_guards_fail_closed() -> None:
             invalid_assessment_factory()
 
     with pytest.raises(DomainValidationError, match="explicit PreparednessProfile"):
-        assess_preparedness(cast(PreparednessProfile, "wrong"), evidence, NOW)
+        assess_preparedness(
+            cast(PreparednessProfile, "wrong"),
+            evidence,
+            NOW,
+            profile_reference=ProfileReference(PROFILE_ID, 1, PROFILE_DIGEST),
+        )
     with pytest.raises(DomainValidationError, match="must be PreparednessEvidence"):
-        assess_preparedness(_profile(), cast(PreparednessEvidence, "wrong"), NOW)
+        assess_preparedness(
+            _profile(),
+            cast(PreparednessEvidence, "wrong"),
+            NOW,
+            profile_reference=ProfileReference(PROFILE_ID, 1, PROFILE_DIGEST),
+        )
+    with pytest.raises(DomainValidationError, match="profile_reference must be exact"):
+        assess_preparedness(
+            _profile(),
+            evidence,
+            NOW,
+            profile_reference=cast(ProfileReference, "wrong"),
+        )
+    with pytest.raises(DomainValidationError, match="identity did not match"):
+        assess_preparedness(
+            _profile(),
+            evidence,
+            NOW,
+            profile_reference=ProfileReference(
+                UUID("228eea41-a31b-4a21-9f47-aae25ae86f49"),
+                1,
+                PROFILE_DIGEST,
+            ),
+        )
 
 
 def test_neutral_review_with_a_dismissal_target_is_ambiguous() -> None:

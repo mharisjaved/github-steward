@@ -223,6 +223,7 @@ def test_competing_profile_successors_allow_exactly_one_commit(
         effective_from=NOW,
         predecessor_profile_id=None,
         predecessor_profile_version=None,
+        predecessor_digest=None,
         payload={"version": 1},
         digest=Digest("1" * 64),
     )
@@ -241,6 +242,7 @@ def test_competing_profile_successors_allow_exactly_one_commit(
             effective_from=NOW.replace(microsecond=654322),
             predecessor_profile_id=profile_id,
             predecessor_profile_version=1,
+            predecessor_digest=Digest("1" * 64),
             payload={"version": 2, "candidate": digest_character},
             digest=Digest(digest_character * 64),
         )
@@ -294,6 +296,7 @@ def test_assessment_lock_rejects_a_competing_backdated_successor(
         effective_from=NOW,
         predecessor_profile_id=None,
         predecessor_profile_version=None,
+        predecessor_digest=None,
         payload={"version": 1},
         digest=Digest("4" * 64),
     )
@@ -304,7 +307,9 @@ def test_assessment_lock_rejects_a_competing_backdated_successor(
         head_sha="a" * 40,
         profile_id=profile_id,
         profile_version=1,
+        profile_digest=Digest("4" * 64),
         analysis_view_id=view_id,
+        analysis_view_digest=Digest("7" * 64),
         evidence_sealed_at=evidence_sealed_at,
         evaluated_at=evidence_sealed_at,
         verdict="READY_FOR_HUMAN_REVIEW",
@@ -319,6 +324,7 @@ def test_assessment_lock_rejects_a_competing_backdated_successor(
         effective_from=evidence_sealed_at,
         predecessor_profile_id=profile_id,
         predecessor_profile_version=1,
+        predecessor_digest=Digest("4" * 64),
         payload={"version": 2},
         digest=Digest("6" * 64),
     )

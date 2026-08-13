@@ -8,7 +8,7 @@ risk_profile: high_assurance
 scope:
   in_scope:
     - "Implement deterministic preparedness from recorded/fake GitHub evidence, coherent A/pass1/B/pass2/C acquisition, immutable persistence, facet-aware ordering, and existing-pointer replay/promotion from accepted source 87feabb3b9ef6c4470c98b95b52319a5128d58f4."
-    - "Validate with the frozen offline environment and disposable local PostgreSQL 16, then create one direct-child candidate commit and persistent evidence package."
+    - "Validate with the frozen offline environment and disposable local PostgreSQL 16, preserve the initial direct-child candidate, then create one bounded CR1 correction commit and non-overwriting evidence package."
   out_of_scope:
     - "GitHub authentication, OAuth, webhooks, live GitHub runtime, GitHub writes, deployment, production credential flows, LLMs, GS-I5, execution enablement, remote Git operations, push, tag, pull request, or merge."
 authorization_envelope:
@@ -45,19 +45,53 @@ authorization_envelope:
         - "OP-GS-I4-LOCAL-WRITES"
         - "OP-GS-I4-DISPOSABLE-DATABASES"
   affected_paths:
-    - ".afef"
-    - "README.md"
-    - "migrations/versions/0003_gs_i4_preparedness.py"
-    - "src/github_steward"
-    - "tests"
+  - "README.md"
+  - ".afef/project-manifest.yaml"
+  - ".afef/specifications/gs-architecture-baseline.md"
+  - ".afef/specifications/gs-d2-production-architecture.md"
+  - ".afef/specifications/gs-i4-deterministic-preparedness.md"
+  - ".afef/work-records/gs-a0-adoption.yaml"
+  - ".afef/work-records/gs-i4.yaml"
+  - "src/github_steward/domain/__init__.py"
+  - "src/github_steward/domain/acquisition.py"
+  - "src/github_steward/domain/errors.py"
+  - "src/github_steward/domain/preparedness.py"
+  - "src/github_steward/application/__init__.py"
+  - "src/github_steward/application/public_acquisition.py"
+  - "src/github_steward/application/local_processing.py"
+  - "src/github_steward/application/preparedness.py"
+  - "src/github_steward/ports/__init__.py"
+  - "src/github_steward/ports/github.py"
+  - "src/github_steward/ports/persistence.py"
+  - "src/github_steward/adapters/github/__init__.py"
+  - "src/github_steward/adapters/github/public_rest.py"
+  - "src/github_steward/adapters/postgres/__init__.py"
+  - "src/github_steward/adapters/postgres/metadata.py"
+  - "src/github_steward/adapters/postgres/repositories.py"
+  - "src/github_steward/adapters/postgres/unit_of_work.py"
+  - "migrations/versions/0003_gs_i4_preparedness.py"
+  - "tests/architecture/test_boundaries.py"
+  - "tests/contract/test_repository_ports.py"
+  - "tests/contract/test_preparedness_properties.py"
+  - "tests/unit/domain/test_acquisition.py"
+  - "tests/unit/domain/test_preparedness.py"
+  - "tests/unit/application/test_public_acquisition.py"
+  - "tests/unit/application/test_preparedness.py"
+  - "tests/unit/adapters/test_public_github.py"
+  - "tests/integration/postgres/test_public_acquisition_postgres.py"
+  - "tests/integration/postgres/test_preparedness_postgres.py"
+  - "tests/integration/postgres/test_repositories.py"
+  - "tests/integration/postgres/test_concurrency.py"
+  - "tests/integration/postgres/test_schema_invariants.py"
+  - "tests/integration/postgres/test_migrations.py"
   constraints:
-    - "Create branch gs-i4-deterministic-preparedness-coherent-evidence and exactly one direct child of the accepted source with subject feat: add deterministic preparedness and coherent evidence."
+    - "Preserve the initial direct-child candidate and add exactly one bounded CR1 correction commit with subject fix: align GS-I4 preparedness identity contracts."
     - "Do not modify pyproject.toml, uv.lock, migrations 0001/0002, or more than 40 paths."
     - "Use recorded/fake evidence and only GS_TEST_DATABASE_ADMIN_URL for disposable PostgreSQL; never inspect or use GH_TOKEN."
   stop_conditions:
     - "Stop on source mismatch, dirty start, dependency authority change, accepted-migration change, required live GitHub access, PostgreSQL unavailability, evidence collision, unresolved material test failure, or path-ceiling breach."
 deliverables:
-  - "GS-I4 implementation, tests, specification and work record, one local candidate commit, bundle, evidence archive, checksums, and implementation completion report."
+  - "GS-I4 implementation, tests, specification and work record, the preserved initial candidate plus one local CR1 correction commit, bundle, evidence archive, checksums, and implementation completion report."
 implementation_state: verified
 implementer:
   actor_id: "local-ide-agent-gs-i4"
@@ -68,13 +102,13 @@ validation_summaries:
     summary: "CPython 3.12.3, Ruff format and lint, strict mypy, all five Import Linter contracts, and the architecture suite pass without dependency or lock changes."
   - check: "Deterministic preparedness behavior"
     result: passed
-    summary: "Unit, contract, and property tests cover exact profiles and assessments, freshness boundaries, uncertainty precedence, status/check/review/requested-reviewer semantics, coherent whole-attempt retry, facet-aware ordering, and bounded current-pointer CAS behavior."
+    summary: "Unit, contract, and property tests cover exact profile ID/version/digest references, predecessor digests, profile-bound check conclusions, acquisition configuration identity, exact analysis-view digest binding, freshness boundaries, semantic status casefolding, uncertainty precedence, review reduction, coherent whole-attempt retry, facet-aware ordering, and bounded current-pointer CAS behavior."
   - check: "PostgreSQL and migration validation"
     result: passed
     summary: "The loopback PostgreSQL 16 CREATEDB-only harness passes disposable-database preflight, linear/no-fork competing successor transactions, immutable repositories, schema invariants, and the 0001 -> 0002 -> gs_i4_0003 migration chain with cleanup."
   - check: "Complete suite and branch coverage"
     result: passed
-    summary: "All 769 tests pass with 99.57 percent global branch coverage and 99.78 percent combined coverage; every new GS-I4 preparedness, evidence, coherent-acquisition, pipeline, and evidence-port module has 100 percent statement and branch coverage."
+    summary: "All 783 tests pass with 99.59 percent global branch coverage and 99.78 percent combined coverage; the consolidated GS-I4 preparedness, evidence, pipeline, and evidence-port material has 100 percent statement and branch coverage."
   - check: "AFEF, integrity, and credential safety"
     result: passed
     summary: "The cleared-environment pinned AFEF validator, protected-file invariance, changed-path ceiling, git integrity, bundle/archive verification, and credential-signature scan pass; evidence contains no secret values or environment files."
