@@ -310,6 +310,7 @@ def test_offline_authenticated_read_reaches_existing_assessment(
     assert not socket_path.exists()
     assert minted.repository_id == REPOSITORY_ID
     assert minted.authorization_version == 1
+    assert minted.expires_at == NOW + timedelta(hours=1)
     assert jwt_claims == [
         {
             "iat": int((NOW - timedelta(seconds=60)).timestamp()),

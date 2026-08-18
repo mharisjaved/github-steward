@@ -6,7 +6,7 @@ import os
 import socket
 import struct
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Event, Thread
 from typing import cast
@@ -26,6 +26,8 @@ from github_steward.infrastructure.broker.unix_socket import (
     UnixBrokerServer,
 )
 from github_steward.ports.secrets import OpaqueBearerToken
+
+_MISSING = object()
 
 
 class FakeBroker:
@@ -105,6 +107,27 @@ def test_authorized_peer_mints_opaque_token_over_one_bounded_frame(
     assert result.token.matches(token)
     assert result.repository_id == 123456
     assert result.authorization_version == 7
+    assert result.expires_at == datetime(2026, 8, 18, 13, 0, tzinfo=UTC)
+    assert broker.calls == ["work-1"]
+    _finish(thread, errors, path)
+
+
+def test_success_response_uses_exact_canonical_utc_expiry_wire_value(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "broker.sock"
+    broker = FakeBroker("opaque")
+    thread, errors = _start(path, broker)
+
+    response = _raw_exchange(path, b'{"version":1,"work_record_id":"work-1"}')
+
+    assert response == {
+        "version": 1,
+        "token": "opaque",
+        "repository_id": 123456,
+        "authorization_version": 7,
+        "expires_at": "2026-08-18T13:00:00Z",
+    }
     assert broker.calls == ["work-1"]
     _finish(thread, errors, path)
 
@@ -370,6 +393,7 @@ class _ClientConnection:
             "token": "",
             "repository_id": 123456,
             "authorization_version": 7,
+            "expires_at": "2026-08-18T13:00:00Z",
         },
     ],
 )
@@ -382,6 +406,56 @@ def test_client_rejects_malformed_response_shapes(
     monkeypatch.setattr(unix_socket, "_receive_mapping", lambda *_a, **_k: response)
     with pytest.raises(UnixBrokerProtocolError, match="MALFORMED_RESPONSE"):
         UnixBrokerClient(socket_path=tmp_path / "broker.sock").MintReadToken("work-1")
+
+
+@pytest.mark.parametrize(
+    "expires_at",
+    [
+        _MISSING,
+        None,
+        True,
+        "",
+        " 2026-08-18T13:00:00Z",
+        "not-a-time",
+        "not-a-timeZ",
+        "2026-08-18T13:00:00",
+        "2026-08-18T13:00:00+00:00",
+        "2026-08-18T14:00:00+01:00",
+        "20260818T130000Z",
+    ],
+)
+def test_client_rejects_missing_malformed_or_non_utc_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    expires_at: object,
+) -> None:
+    response: dict[str, object] = {
+        "version": 1,
+        "token": "opaque",
+        "repository_id": 123456,
+        "authorization_version": 7,
+    }
+    if expires_at is not _MISSING:
+        response["expires_at"] = expires_at
+    monkeypatch.setattr(socket, "socket", lambda *_: _ClientConnection())
+    monkeypatch.setattr(unix_socket, "_receive_mapping", lambda *_a, **_k: response)
+
+    with pytest.raises(UnixBrokerProtocolError, match="MALFORMED_RESPONSE"):
+        UnixBrokerClient(socket_path=tmp_path / "broker.sock").MintReadToken("work-1")
+
+
+@pytest.mark.parametrize(
+    "expires_at",
+    [
+        datetime(2026, 8, 18, 13, 0),
+        datetime(2026, 8, 18, 14, 0, tzinfo=timezone(timedelta(hours=1))),
+    ],
+)
+def test_server_rejects_non_utc_broker_expiry(
+    expires_at: datetime,
+) -> None:
+    with pytest.raises(UnixBrokerProtocolError, match="INVALID_BROKER_RESULT"):
+        unix_socket._format_utc_expiry(expires_at)
 
 
 class _PeerConnection:

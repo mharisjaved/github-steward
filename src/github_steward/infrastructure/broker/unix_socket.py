@@ -9,6 +9,7 @@ import stat
 import struct
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Protocol
 
@@ -30,6 +31,7 @@ class UnixMintReadTokenResult:
     token: OpaqueBearerToken
     repository_id: int
     authorization_version: int
+    expires_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +117,7 @@ class UnixBrokerServer:
                         "token": result.token._authorized_broker_wire_value(),
                         "repository_id": result.repository_id,
                         "authorization_version": result.authorization_version,
+                        "expires_at": _format_utc_expiry(result.expires_at),
                     }
                 except CredentialBrokerError as exc:
                     response = {
@@ -199,12 +202,14 @@ class UnixBrokerClient:
             "token",
             "repository_id",
             "authorization_version",
+            "expires_at",
         }:
             raise UnixBrokerProtocolError("MALFORMED_RESPONSE")
         version = response["version"]
         token = response["token"]
         repository_id = response["repository_id"]
         authorization_version = response["authorization_version"]
+        expires_at = _parse_utc_expiry(response["expires_at"])
         if (
             isinstance(version, bool)
             or version != PROTOCOL_VERSION
@@ -222,6 +227,7 @@ class UnixBrokerClient:
             OpaqueBearerToken(token),
             repository_id,
             authorization_version,
+            expires_at,
         )
 
 
@@ -237,6 +243,34 @@ def _peer_identity(connection: socket.socket) -> UnixPeerIdentity:
     if pid < 1 or uid < 0 or gid < 0:
         raise UnixBrokerProtocolError("PEER_CREDENTIALS_INVALID")
     return UnixPeerIdentity(pid, uid, gid)
+
+
+def _format_utc_expiry(value: datetime) -> str:
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() != UTC.utcoffset(value)
+    ):
+        raise UnixBrokerProtocolError("INVALID_BROKER_RESULT")
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _parse_utc_expiry(value: object) -> datetime:
+    if not isinstance(value, str) or value == "" or value != value.strip():
+        raise UnixBrokerProtocolError("MALFORMED_RESPONSE")
+    if not value.endswith("Z"):
+        raise UnixBrokerProtocolError("MALFORMED_RESPONSE")
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as exc:
+        raise UnixBrokerProtocolError("MALFORMED_RESPONSE") from exc
+    if (
+        parsed.tzinfo is None
+        or parsed.utcoffset() != UTC.utcoffset(parsed)
+        or _format_utc_expiry(parsed) != value
+    ):
+        raise UnixBrokerProtocolError("MALFORMED_RESPONSE")
+    return parsed.astimezone(UTC)
 
 
 def _request_work_record_id(value: dict[str, object]) -> str:
