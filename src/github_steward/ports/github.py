@@ -92,8 +92,8 @@ class RecordedFacet:
     complete: bool = True
 
 
-class RecordedGitHubEvidencePort(Protocol):
-    """Read-only recorded/fake evidence; no live client or mutation surface."""
+class GitHubEvidencePort(Protocol):
+    """Read-only evidence source shared by recorded and authenticated adapters."""
 
     def read_anchor(self, target: RepositoryTarget) -> RecordedGitHubResponse:
         """Return one pull-request anchor read."""
@@ -106,6 +106,11 @@ class RecordedGitHubEvidencePort(Protocol):
         facet: EvidenceFacet,
     ) -> RecordedFacet:
         """Return one complete exact-head facet acquisition."""
+
+
+# GS-I4 compatibility name.  The protocol is structural, so existing recorded/fake
+# adapters and tests continue to satisfy the exact same two-operation contract.
+RecordedGitHubEvidencePort = GitHubEvidencePort
 
 
 class CoherentAcquisitionFailure(RuntimeError):

@@ -7,6 +7,9 @@ from types import TracebackType
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.base import RootTransaction
 
+from github_steward.adapters.postgres.github_authorization import (
+    PostgresGitHubAuthorizationRepository,
+)
 from github_steward.adapters.postgres.repositories import (
     FaultInjector,
     PostgresAnalysisViewRepository,
@@ -31,6 +34,7 @@ class PostgresUnitOfWork:
     audits: PostgresAuditEventRepository
     profiles: PostgresPreparednessProfileRepository
     assessments: PostgresPreparednessAssessmentRepository
+    github_authorization: PostgresGitHubAuthorizationRepository
 
     def __init__(
         self,
@@ -64,6 +68,7 @@ class PostgresUnitOfWork:
         self.audits = PostgresAuditEventRepository(connection, self._fault_injector)
         self.profiles = PostgresPreparednessProfileRepository(connection)
         self.assessments = PostgresPreparednessAssessmentRepository(connection)
+        self.github_authorization = PostgresGitHubAuthorizationRepository(connection)
         return self
 
     def __exit__(

@@ -20,6 +20,7 @@ from github_steward.adapters.postgres.metadata import (
     canonical_observation,
     current_observation_pointer,
     delivery_inbox,
+    installation_observation,
     preparedness_assessment,
     preparedness_assessment_evidence,
     preparedness_profile,
@@ -78,6 +79,29 @@ def _insert_delivery(connection: Connection, suffix: str = "schema") -> UUID:
             payload_schema_version=1,
             canonical_payload={"value": suffix},
             payload_digest_format="jcs-sha256/v1",
+        )
+    )
+    return identifier
+
+
+def _insert_installation_observation(connection: Connection) -> UUID:
+    identifier = uuid4()
+    connection.execute(
+        installation_observation.insert().values(
+            observation_id=identifier,
+            installation_id=7001,
+            app_id=6001,
+            account_id=8001,
+            account_type="Organization",
+            repository_selection="selected",
+            permission_metadata="read",
+            permission_pull_requests="read",
+            permission_checks="read",
+            permission_statuses="read",
+            suspended=False,
+            suspended_at=None,
+            observed_at=NOW,
+            source_digest=DIGEST,
         )
     )
     return identifier
@@ -224,6 +248,11 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
                 "analysis_view_observation",
                 "fk_preparedness_assessment_evidence_view_observation",
             ),
+            (
+                "repository_authorization",
+                "installation_observation",
+                "fk_repository_authorization_installation_observation",
+            ),
         }
         trigger_rows = set(
             connection.execute(
@@ -237,13 +266,20 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
                 )
             ).tuples()
         )
-        assert trigger_rows == {
+        expected_append_only_triggers = {
             (
                 table_name,
                 f"trg_{table_name}_reject_mutation",
                 "gs_i1_reject_append_only_mutation",
             )
             for table_name in APPEND_ONLY_TABLE_NAMES
+        }
+        assert trigger_rows == expected_append_only_triggers | {
+            (
+                "repository_authorization",
+                "trg_repository_authorization_require_cas_version",
+                "gs_i5_require_authorization_cas_version",
+            )
         }
     assert {column["name"] for column in inspector.get_columns("delivery_inbox")} == {
         "delivery_id",
@@ -276,6 +312,67 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
         "ck_work_attempt_state_timestamp_consistency",
         "ck_work_attempt_number_positive",
     }
+    assert {
+        column["name"] for column in inspector.get_columns("installation_observation")
+    } == {
+        "observation_id",
+        "installation_id",
+        "app_id",
+        "account_id",
+        "account_type",
+        "repository_selection",
+        "permission_metadata",
+        "permission_pull_requests",
+        "permission_checks",
+        "permission_statuses",
+        "suspended",
+        "suspended_at",
+        "observed_at",
+        "source_digest",
+        "created_at",
+    }
+    authorization_columns = {
+        column["name"] for column in inspector.get_columns("repository_authorization")
+    }
+    assert authorization_columns == {
+        "repository_id",
+        "authorization_version",
+        "installation_id",
+        "installation_observation_id",
+        "route_owner",
+        "route_repository",
+        "installation_account_id",
+        "repository_selected",
+        "route_verified",
+        "granted_metadata",
+        "granted_pull_requests",
+        "granted_checks",
+        "granted_statuses",
+        "capability",
+        "write_enabled",
+        "updated_at",
+    }
+    prohibited_credential_terms = {
+        "private_key",
+        "private_key_pem",
+        "jwt",
+        "token",
+        "installation_token",
+        "authorization_header",
+        "credential",
+        "secret",
+        "pem",
+    }
+    assert (
+        not (
+            authorization_columns
+            | {
+                column["name"]
+                for column in inspector.get_columns("installation_observation")
+            }
+        )
+        & prohibited_credential_terms
+    )
 
 
 @pytest.mark.parametrize("table_name", APPEND_ONLY_TABLE_NAMES)
@@ -293,6 +390,11 @@ def test_append_only_trigger_rejects_update_and_delete(
             predicate = "delivery_id = %s"
             parameters = (identifier,)
             assignment = "payload_digest = payload_digest"
+        elif table_name == "installation_observation":
+            identifier = _insert_installation_observation(connection)
+            predicate = "observation_id = %s"
+            parameters = (identifier,)
+            assignment = "source_digest = source_digest"
         elif table_name == "analysis_view_observation":
             view_id = _insert_analysis_view(connection)
             connection.execute(

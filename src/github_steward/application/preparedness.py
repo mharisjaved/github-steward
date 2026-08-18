@@ -1,4 +1,4 @@
-"""Bounded recorded/fake A/pass-1/B/pass-2/C coherent acquisition."""
+"""Bounded evidence A/pass-1/B/pass-2/C coherent acquisition."""
 
 from __future__ import annotations
 
@@ -72,8 +72,8 @@ from github_steward.ports.github import (
     CoherentAcquisitionPort,
     CoherentAcquisitionResult,
     EvidenceFacet,
+    GitHubEvidencePort,
     RecordedFacet,
-    RecordedGitHubEvidencePort,
     RecordedGitHubResponse,
 )
 from github_steward.ports.persistence import (
@@ -134,12 +134,12 @@ class _Pass:
 
 
 class CoherentRecordedAcquisitionService:
-    """Acquire a view from bounded recorded responses without GitHub credentials."""
+    """Acquire a view while credential handling remains evidence-adapter owned."""
 
     def __init__(
         self,
         *,
-        evidence: RecordedGitHubEvidencePort,
+        evidence: GitHubEvidencePort,
         clock: Clock,
         envelope_factory: EnvelopeFactory,
         acquisition_configuration_digest: Digest,
