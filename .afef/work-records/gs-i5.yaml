@@ -1,0 +1,196 @@
+# AFEF v0.2.0 GS-I5 lifecycle closeout record.
+# No earlier historical review or acceptance timestamp was supplied. The
+# timestamps below record receipt of those completed dispositions in this
+# repository lifecycle closeout; they do not claim an earlier event time.
+schema_version: "0.2.0"
+work_id: "GS-I5"
+related_specifications:
+  - "SPEC-0001"
+  - "SPEC-0002"
+  - "SPEC-0003"
+  - "SPEC-0004"
+  - "SPEC-0005"
+  - "SPEC-0006"
+risk_profile: high_assurance
+scope:
+  in_scope:
+    - "Implement the credential-contained GitHub App identity and read-token broker, authenticated GET-only evidence acquisition, authorization CAS and epoch binding, immutable authorization persistence, and migration gs_i5_0004 from accepted baseline d0956b56c60928e15f427aee22c21c48903b6d83."
+    - "Preserve the initial implementation commit, add one bounded correction for required token-expiry transport, close the recorded assurance and operational findings, and validate the exact two-commit GS-I5 candidate offline."
+    - "Integrate exact accepted candidate 578cdd7c65c35b1dff517785392297ea15e7c3ae by direct non-force fast-forward, remotely verify it, and record this documentation-only lifecycle closeout."
+  out_of_scope:
+    - "GitHub mutation through the product, deployment, release, tagging, production enablement, and any force push or history rewrite."
+    - "GS-I6 — Verified Webhook Ingress and Durable Refresh Scheduling, whose implementation remains NOT_AUTHORIZED."
+authorization_envelope:
+  operations:
+    - operation_id: "OP-GS-I5-LOCAL-READS"
+      effect_class: local-read
+      decision: permitted
+      authorization_requirement: bounded_work_envelope
+      description: "Read the accepted repository, frozen local environment, credential-redacted evidence, and validation output."
+    - operation_id: "OP-GS-I5-IMPLEMENTATION-WRITES"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create the bounded two-commit GS-I5 implementation candidate and its offline tests and evidence."
+    - operation_id: "OP-GS-I5-DISPOSABLE-DATABASES"
+      effect_class: local-destructive
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create and remove only harness-designated disposable PostgreSQL databases."
+    - operation_id: "OP-GS-I5-INTEGRATION-REMOTE-READS"
+      effect_class: external-read
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Fetch origin/main only for the exact pre-push and post-push integration and closeout gates."
+    - operation_id: "OP-GS-I5-INTEGRATION-REMOTE-WRITES"
+      effect_class: external-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Push only the accepted candidate and its one direct-descendant documentation closeout to main by normal non-force fast-forward."
+    - operation_id: "OP-GS-I5-PRODUCT-GITHUB-WRITES"
+      effect_class: external-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "The GS-I5 product capability may not mutate GitHub."
+    - operation_id: "OP-GS-I5-PRODUCTION"
+      effect_class: publication-release
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "Production, deployment, release, and tagging remain NOT_AUTHORIZED."
+    - operation_id: "OP-GS-I6-IMPLEMENTATION"
+      effect_class: local-reversible-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "GS-I6 implementation is NOT_AUTHORIZED."
+  authorization_references:
+    - authorization_id: "AUTH-GS-I5-IMPLEMENTATION"
+      reference: "Product Owner GS-I5 bounded implementation authorization recorded by the exact implementation evidence."
+      operation_ids:
+        - "OP-GS-I5-IMPLEMENTATION-WRITES"
+        - "OP-GS-I5-DISPOSABLE-DATABASES"
+    - authorization_id: "AUTH-GS-I5-INTEGRATION-AND-CLOSEOUT"
+      reference: "Product Owner exact GS-I5 candidate acceptance and authorization for direct integration and the immediately following documentation-only lifecycle closeout."
+      operation_ids:
+        - "OP-GS-I5-INTEGRATION-REMOTE-READS"
+        - "OP-GS-I5-INTEGRATION-REMOTE-WRITES"
+  affected_paths:
+    - "migrations/versions/0004_gs_i5_github_app_identity.py"
+    - "pyproject.toml"
+    - "src/github_steward/adapters/github/authenticated_rest.py"
+    - "src/github_steward/adapters/postgres/github_authorization.py"
+    - "src/github_steward/adapters/postgres/metadata.py"
+    - "src/github_steward/adapters/postgres/unit_of_work.py"
+    - "src/github_steward/application/authenticated_acquisition.py"
+    - "src/github_steward/application/github_authorization.py"
+    - "src/github_steward/application/preparedness.py"
+    - "src/github_steward/domain/github_authorization.py"
+    - "src/github_steward/infrastructure/broker/__init__.py"
+    - "src/github_steward/infrastructure/broker/app_control_plane.py"
+    - "src/github_steward/infrastructure/broker/cache.py"
+    - "src/github_steward/infrastructure/broker/credential_broker.py"
+    - "src/github_steward/infrastructure/broker/jwt_signer.py"
+    - "src/github_steward/infrastructure/broker/unix_socket.py"
+    - "src/github_steward/ports/github.py"
+    - "src/github_steward/ports/github_app.py"
+    - "src/github_steward/ports/github_authorization.py"
+    - "src/github_steward/ports/secrets.py"
+    - "tests/architecture/test_boundaries.py"
+    - "tests/architecture/test_gs_i5_security_boundaries.py"
+    - "tests/integration/postgres/test_github_authorization_postgres.py"
+    - "tests/integration/postgres/test_gs_i5_offline_end_to_end.py"
+    - "tests/integration/postgres/test_migrations.py"
+    - "tests/integration/postgres/test_schema_invariants.py"
+    - "tests/unit/adapters/test_authenticated_github.py"
+    - "tests/unit/adapters/test_postgres_github_authorization.py"
+    - "tests/unit/application/test_authenticated_acquisition.py"
+    - "tests/unit/application/test_github_authorization_service.py"
+    - "tests/unit/domain/test_github_authorization.py"
+    - "tests/unit/infrastructure/test_app_control_plane.py"
+    - "tests/unit/infrastructure/test_broker_security.py"
+    - "tests/unit/infrastructure/test_credential_broker.py"
+    - "tests/unit/infrastructure/test_unix_broker.py"
+    - "uv.lock"
+    - ".afef/project-manifest.yaml"
+    - ".afef/work-records/gs-i5.yaml"
+  constraints:
+    - "Preserve exact history d0956b56c60928e15f427aee22c21c48903b6d83 -> 0535fe22b8d44428c68827983e7a70b8c95c4914 -> 578cdd7c65c35b1dff517785392297ea15e7c3ae."
+    - "Use only direct non-force fast-forwards for candidate integration and the single documentation closeout commit; force_push=false and history_rewritten=false."
+    - "The lifecycle closeout changes only .afef/work-records/gs-i5.yaml and .afef/project-manifest.yaml and changes no product code."
+  stop_conditions:
+    - "Stop on any candidate, tree, ancestry, clean-state, or origin/main mismatch; any branch-protection rejection; any validation failure; any unauthorized closeout path; or any concurrent origin/main movement."
+deliverables:
+  - "Exact GS-I5 implementation and bounded correction, offline evidence, accepted candidate integration, remote verification, and repository-owned lifecycle closeout."
+implementation_state: verified
+implementer:
+  actor_id: "local-ide-agent-gs-i5"
+  role: ide_agent
+repository_evidence:
+  commit: "578cdd7c65c35b1dff517785392297ea15e7c3ae"
+  working_tree: "Exact accepted tree f68d90eb316d469cbe9fd048db2f139950c0a47b; integrated and remotely verified on origin/main by direct non-force fast-forward."
+validation_summaries:
+  - check: "GS-I5 implementation validation"
+    result: passed
+    summary: "The recorded offline gates passed: focused security 288 tests, corrected Unix protocol 43 tests with 208/208 statements and 66/66 branches, PostgreSQL 98 tests, architecture 17 tests and 5/5 import contracts, complete suite 1,136 tests, 99.7203 percent global branch coverage, static gates, AFEF, lock, migration, integrity, and credential-safety checks."
+  - check: "GS-I5 historical AMBER findings and closure"
+    result: passed
+    summary: "Historical findings remain recorded rather than erased: GS-I5-SUP-001 identified the missing required AF_UNIX token-expiry response field and is CLOSED by correction 578cdd7c65c35b1dff517785392297ea15e7c3ae; GS-I5-OPS-001 recorded credential rotation and host-environment follow-up and is CLOSED after rotation and PostgreSQL 16 revalidation; GS-I5-IR-EVID-001 and GS-I5-IR-OPS-001 are CLOSED by the independent-review evidence supplement."
+  - check: "GS-I5 assurance disposition"
+    result: passed
+    summary: "Implementation Supervisor=GREEN and High Assurance Independent Security Review=GREEN for exact accepted candidate 578cdd7c65c35b1dff517785392297ea15e7c3ae with tree f68d90eb316d469cbe9fd048db2f139950c0a47b."
+  - check: "GS-I5 Product Owner acceptance and integration"
+    result: passed
+    summary: "Product Owner exact-candidate acceptance=FORMALLY_ACCEPTED; method=DIRECT_NON_FORCE_FAST_FORWARD; result=INTEGRATED_AND_REMOTELY_VERIFIED; force_push=false; history_rewritten=false."
+  - check: "GS-I5 lifecycle closeout"
+    result: passed
+    summary: "definition=FORMALLY_ACCEPTED; implementation=COMPLETE; final_status=FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED; next_package=GS-I6 — Verified Webhook Ingress and Durable Refresh Scheduling; gs_i6_implementation=NOT_AUTHORIZED; production=NOT_AUTHORIZED."
+evidence_references:
+  - "GS-I5 implementation-02 completion evidence generated at 2026-08-18T18:10:49Z."
+  - "GS-I5 independent-review evidence supplement generated at 2026-08-19T07:37:39Z."
+reviews:
+  - review_id: "GS-I5-IMPLEMENTATION-SUPERVISOR"
+    status: completed
+    reviewer:
+      actor_id: "github-steward-implementation-supervisor"
+      role: implementation_supervisor
+    recommendation: accept
+    evidence_reference: "Exact candidate 578cdd7c65c35b1dff517785392297ea15e7c3ae and tree f68d90eb316d469cbe9fd048db2f139950c0a47b; GREEN."
+  - review_id: "GS-I5-HIGH-ASSURANCE-INDEPENDENT-SECURITY-REVIEW"
+    status: completed
+    reviewer:
+      actor_id: "github-steward-independent-security-reviewer"
+      role: independent_reviewer
+    recommendation: accept
+    evidence_reference: "Exact candidate 578cdd7c65c35b1dff517785392297ea15e7c3ae and tree f68d90eb316d469cbe9fd048db2f139950c0a47b; GREEN; GS-I5-IR-EVID-001 and GS-I5-IR-OPS-001 CLOSED."
+  - review_id: "GS-I5-PRODUCT-OWNER-EXACT-CANDIDATE-ACCEPTANCE"
+    status: completed
+    reviewer:
+      actor_id: "github-steward-product-owner"
+      role: product_owner
+    recommendation: accept
+    evidence_reference: "Exact candidate 578cdd7c65c35b1dff517785392297ea15e7c3ae and tree f68d90eb316d469cbe9fd048db2f139950c0a47b; FORMALLY_ACCEPTED."
+independent_review:
+  status: accepted
+  reviewer:
+    actor_id: "github-steward-independent-security-reviewer"
+    role: independent_reviewer
+  evidence_reference: ".afef/work-records/gs-i5.yaml"
+  # Closeout receipt/recording time; no earlier review event time is claimed.
+  reviewed_at: "2026-08-20T13:33:44Z"
+final_gate:
+  status: accepted
+  owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+  # Closeout receipt/recording time; no earlier acceptance event time is claimed.
+  recorded_at: "2026-08-20T13:33:44Z"
+human_checkpoint:
+  status: completed
+  owner:
+    actor_id: "github-steward-product-owner"
+    role: product_owner
+  next_required_action: "No GS-I5 action remains. GS-I6 — Verified Webhook Ingress and Durable Refresh Scheduling is next but its implementation is NOT_AUTHORIZED."
+known_limitations:
+  - "GS-I5 establishes a credential-contained authenticated read capability; it does not authorize GitHub mutation, webhook ingress, durable refresh scheduling, deployment, release, or production."
+  - "No earlier independent-review or Product Owner event timestamp was supplied; reviewed_at and recorded_at identify only when the completed dispositions were received and recorded by this repository closeout."
+  - "This closeout creates no GS-I6 implementation or production authority."
+next_action: "GS-I5 is FORMALLY_ACCEPTED_INTEGRATED_AND_CLOSED. GS-I6 — Verified Webhook Ingress and Durable Refresh Scheduling remains NOT_AUTHORIZED, and production remains NOT_AUTHORIZED."
