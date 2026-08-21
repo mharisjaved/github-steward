@@ -29,6 +29,7 @@ from github_steward.domain.processing import (
     LEASE_DURATION_SECONDS,
     RECONCILIATION_BATCH_LIMIT,
     RETRY_DELAY_SECONDS,
+    WORK_TYPE,
     AttemptState,
     FailureKind,
     FaultPoint,
@@ -284,6 +285,7 @@ class PostgresWorkRepository:
                     delivery_inbox.c.delivery_id == work_record.c.delivery_id,
                 )
                 .where(
+                    work_record.c.work_type == WORK_TYPE,
                     work_record.c.state.in_(
                         [WorkState.AVAILABLE.value, WorkState.RETRY_WAIT.value]
                     ),

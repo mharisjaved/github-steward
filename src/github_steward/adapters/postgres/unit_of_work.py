@@ -21,6 +21,10 @@ from github_steward.adapters.postgres.repositories import (
     PostgresPreparednessProfileRepository,
     PostgresWorkRepository,
 )
+from github_steward.adapters.postgres.webhook import (
+    PostgresSecurityEventRepository,
+    PostgresWebhookDeliveryRepository,
+)
 
 
 class PostgresUnitOfWork:
@@ -35,6 +39,9 @@ class PostgresUnitOfWork:
     profiles: PostgresPreparednessProfileRepository
     assessments: PostgresPreparednessAssessmentRepository
     github_authorization: PostgresGitHubAuthorizationRepository
+    webhook_deliveries: PostgresWebhookDeliveryRepository
+    security_events: PostgresSecurityEventRepository
+    webhook_audits: PostgresAuditEventRepository
 
     def __init__(
         self,
@@ -69,6 +76,9 @@ class PostgresUnitOfWork:
         self.profiles = PostgresPreparednessProfileRepository(connection)
         self.assessments = PostgresPreparednessAssessmentRepository(connection)
         self.github_authorization = PostgresGitHubAuthorizationRepository(connection)
+        self.webhook_deliveries = PostgresWebhookDeliveryRepository(connection)
+        self.security_events = PostgresSecurityEventRepository(connection)
+        self.webhook_audits = self.audits
         return self
 
     def __exit__(

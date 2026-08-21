@@ -18,6 +18,8 @@ from github_steward.adapters.postgres.metadata import (
 ROOT = pathlib.Path(__file__).parents[2]
 SRC = ROOT / "src" / "github_steward"
 GS_I5_BASELINE = "d0956b56c60928e15f427aee22c21c48903b6d83"
+GS_I5_CANDIDATE = "578cdd7c65c35b1dff517785392297ea15e7c3ae"
+GS_I6_BASELINE = "71af3d1967175d5f44127de8259535854ba19c13"
 GS_I5_EXACT_ALLOWED_PATHS = frozenset(
     {
         "migrations/versions/0004_gs_i5_github_app_identity.py",
@@ -50,6 +52,28 @@ GS_I5_SECURITY_INFRASTRUCTURE_MARKERS = frozenset(
         "token",
         "unix",
     }
+)
+GS_I6_EXACT_ALLOWED_PATHS = frozenset(
+    {
+        "migrations/versions/0005_gs_i6_webhook_ingress.py",
+        "pyproject.toml",
+        "uv.lock",
+    }
+)
+GS_I6_ALLOWED_PATH_PREFIXES = (
+    ".afef/specifications/",
+    ".afef/work-records/",
+    "src/github_steward/domain/",
+    "src/github_steward/application/",
+    "src/github_steward/ports/",
+    "src/github_steward/adapters/postgres/",
+    "src/github_steward/adapters/web/",
+    "src/github_steward/infrastructure/",
+    "tests/unit/",
+    "tests/contract/",
+    "tests/integration/postgres/",
+    "tests/integration/web/",
+    "tests/architecture/",
 )
 GS_I4_TABLE_NAMES = frozenset(
     {
@@ -101,6 +125,12 @@ def _is_allowed_gs_i5_path(path: str) -> bool:
     return path.startswith(GS_I5_ALLOWED_PATH_PREFIXES)
 
 
+def _is_allowed_gs_i6_path(path: str) -> bool:
+    return path in GS_I6_EXACT_ALLOWED_PATHS or path.startswith(
+        GS_I6_ALLOWED_PATH_PREFIXES
+    )
+
+
 def test_domain_imports_only_standard_library_and_itself() -> None:
     imports = _module_imports("domain")
     prohibited_roots = {
@@ -136,12 +166,13 @@ def test_only_clock_infrastructure_reads_wall_clock() -> None:
     assert implicit_readers == {"infrastructure/clock.py"}
 
 
-def test_exactly_thirteen_core_tables_and_no_orm() -> None:
+def test_exactly_fourteen_core_tables_and_no_orm() -> None:
     assert tuple(metadata.tables) == TABLE_NAMES
-    assert len(metadata.tables) == 13
+    assert len(metadata.tables) == 14
     assert set(TABLE_NAMES) == GS_I4_TABLE_NAMES | {
         "installation_observation",
         "repository_authorization",
+        "security_event",
     }
     source_text = "\n".join(path.read_text() for path in SRC.rglob("*.py"))
     for prohibited in (
@@ -155,7 +186,7 @@ def test_exactly_thirteen_core_tables_and_no_orm() -> None:
         assert prohibited not in source_text
 
 
-def test_exactly_nine_append_only_targets() -> None:
+def test_exactly_ten_append_only_targets() -> None:
     assert APPEND_ONLY_TABLE_NAMES == (
         "delivery_inbox",
         "canonical_observation",
@@ -166,6 +197,7 @@ def test_exactly_nine_append_only_targets() -> None:
         "preparedness_assessment",
         "preparedness_assessment_evidence",
         "installation_observation",
+        "security_event",
     )
     assert set(APPEND_ONLY_TABLE_NAMES) <= set(TABLE_NAMES)
 
@@ -197,13 +229,14 @@ def test_application_imports_only_domain_and_ports_with_no_remote_technology() -
     }
 
 
-def test_exactly_four_linear_alembic_revisions() -> None:
+def test_exactly_five_linear_alembic_revisions() -> None:
     revision_files = sorted((ROOT / "migrations" / "versions").glob("*.py"))
     assert [path.name for path in revision_files] == [
         "0001_gs_i1_foundation.py",
         "0002_gs_i2_durable_processing.py",
         "0003_gs_i4_preparedness.py",
         "0004_gs_i5_github_app_identity.py",
+        "0005_gs_i6_webhook_ingress.py",
     ]
     identities = []
     for path in revision_files:
@@ -225,17 +258,19 @@ def test_exactly_four_linear_alembic_revisions() -> None:
         ("gs_i2_0002", '"gs_i1_0001"'),
         ("gs_i4_0003", '"gs_i2_0002"'),
         ("gs_i5_0004", '"gs_i4_0003"'),
+        ("gs_i6_0005", '"gs_i5_0004"'),
     ]
 
 
-def test_gs_i1_through_gs_i4_migrations_are_byte_identical() -> None:
+def test_gs_i1_through_gs_i5_migrations_are_byte_identical() -> None:
     protected = (
         "migrations/versions/0001_gs_i1_foundation.py",
         "migrations/versions/0002_gs_i2_durable_processing.py",
         "migrations/versions/0003_gs_i4_preparedness.py",
+        "migrations/versions/0004_gs_i5_github_app_identity.py",
     )
     result = subprocess.run(
-        ["git", "diff", "--name-only", GS_I5_BASELINE, "--", *protected],
+        ["git", "diff", "--name-only", GS_I6_BASELINE, "--", *protected],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -255,6 +290,8 @@ def test_dependency_categories_are_bounded() -> None:
         "psycopg[binary]>=3.3,<3.4",
         "rfc8785>=0.1.4,<0.2",
         "PyJWT[crypto]>=2.13,<3",
+        "starlette>=1.2,<1.3",
+        "uvicorn>=0.49,<0.50",
     }
     expected_dev = {
         "pytest>=9,<10",
@@ -275,9 +312,23 @@ def test_dependency_categories_are_bounded() -> None:
     ]
 
 
-def test_gs_i5_baseline_diff_stays_within_authorized_paths_and_ceiling() -> None:
+def test_gs_i5_candidate_diff_stayed_within_authorized_paths_and_ceiling() -> None:
     changed = subprocess.run(
-        ["git", "diff", "--name-only", GS_I5_BASELINE, "--"],
+        ["git", "diff", "--name-only", GS_I5_BASELINE, GS_I5_CANDIDATE, "--"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    gs_i5_paths = set(changed)
+
+    assert len(gs_i5_paths) <= 50
+    assert not {path for path in gs_i5_paths if not _is_allowed_gs_i5_path(path)}
+
+
+def test_gs_i6_baseline_diff_stays_within_authorized_paths_and_ceiling() -> None:
+    changed = subprocess.run(
+        ["git", "diff", "--name-only", GS_I6_BASELINE, "--"],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -290,7 +341,7 @@ def test_gs_i5_baseline_diff_stays_within_authorized_paths_and_ceiling() -> None
         capture_output=True,
         text=True,
     ).stdout.splitlines()
-    gs_i5_paths = set(changed) | set(untracked)
+    gs_i6_paths = set(changed) | set(untracked)
 
-    assert len(gs_i5_paths) <= 50
-    assert not {path for path in gs_i5_paths if not _is_allowed_gs_i5_path(path)}
+    assert len(gs_i6_paths) <= 50
+    assert not {path for path in gs_i6_paths if not _is_allowed_gs_i6_path(path)}

@@ -17,6 +17,7 @@ from github_steward.adapters.postgres.metadata import (
     repository_authorization,
     work_record,
 )
+from github_steward.domain.acquisition import GITHUB_REFRESH_WORK_TYPE
 from github_steward.domain.github_authorization import (
     AuthorizationCapability,
     GitHubPermissionLevel,
@@ -63,11 +64,20 @@ class PostgresGitHubAuthorizationRepository:
         )
         if row is None:
             return None
+        work_type = str(row["work_type"])
+        if work_type != GITHUB_REFRESH_WORK_TYPE:
+            return BrokerWorkIdentity(
+                work_record_id=str(row["work_record_id"]),
+                provider=str(row["provider"]),
+                work_type=work_type,
+                repository_id=0,
+                pull_number=0,
+            )
         repository_id, pull_number = _work_subject(row["canonical_payload"])
         return BrokerWorkIdentity(
             work_record_id=str(row["work_record_id"]),
             provider=str(row["provider"]),
-            work_type=str(row["work_type"]),
+            work_type=work_type,
             repository_id=repository_id,
             pull_number=pull_number,
         )

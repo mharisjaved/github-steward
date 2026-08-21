@@ -24,6 +24,7 @@ from github_steward.adapters.postgres.metadata import (
     preparedness_assessment,
     preparedness_assessment_evidence,
     preparedness_profile,
+    security_event,
     work_attempt,
     work_record,
 )
@@ -102,6 +103,25 @@ def _insert_installation_observation(connection: Connection) -> UUID:
             suspended_at=None,
             observed_at=NOW,
             source_digest=DIGEST,
+        )
+    )
+    return identifier
+
+
+def _insert_security_event(connection: Connection) -> UUID:
+    delivery_id = _insert_delivery(connection, "security-event")
+    identifier = uuid4()
+    connection.execute(
+        security_event.insert().values(
+            security_event_id=identifier,
+            delivery_id=delivery_id,
+            event_kind="WEBHOOK_SIGNED_SCHEMA_INVALID",
+            occurred_at=NOW,
+            schema_id="github-steward.security-event/v1",
+            schema_version=1,
+            canonical_metadata={"classification": "SIGNED_SCHEMA_INVALID"},
+            digest_format="jcs-sha256/v1",
+            digest_value=DIGEST,
         )
     )
     return identifier
@@ -253,6 +273,11 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
                 "installation_observation",
                 "fk_repository_authorization_installation_observation",
             ),
+            (
+                "security_event",
+                "delivery_inbox",
+                "fk_security_event_delivery",
+            ),
         }
         trigger_rows = set(
             connection.execute(
@@ -286,6 +311,7 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
         "provider",
         "provider_delivery_id",
         "payload_digest",
+        "raw_payload_digest",
         "received_at",
         "payload_schema_id",
         "payload_schema_version",
@@ -303,7 +329,11 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
     assert {
         constraint["name"]
         for constraint in inspector.get_check_constraints("delivery_inbox")
-    } >= {"ck_delivery_inbox_provider_inventory"}
+    } >= {
+        "ck_delivery_inbox_provider_inventory",
+        "ck_delivery_inbox_raw_payload_digest_sha256",
+        "ck_delivery_inbox_webhook_raw_digest",
+    }
     assert {
         constraint["name"]
         for constraint in inspector.get_check_constraints("work_attempt")
@@ -352,6 +382,18 @@ def test_direct_catalog_table_column_constraint_index_and_fk_inventory(
         "write_enabled",
         "updated_at",
     }
+    assert {column["name"] for column in inspector.get_columns("security_event")} == {
+        "security_event_id",
+        "delivery_id",
+        "event_kind",
+        "occurred_at",
+        "schema_id",
+        "schema_version",
+        "canonical_metadata",
+        "digest_format",
+        "digest_value",
+        "inserted_at",
+    }
     prohibited_credential_terms = {
         "private_key",
         "private_key_pem",
@@ -395,6 +437,11 @@ def test_append_only_trigger_rejects_update_and_delete(
             predicate = "observation_id = %s"
             parameters = (identifier,)
             assignment = "source_digest = source_digest"
+        elif table_name == "security_event":
+            identifier = _insert_security_event(connection)
+            predicate = "security_event_id = %s"
+            parameters = (identifier,)
+            assignment = "digest_value = digest_value"
         elif table_name == "analysis_view_observation":
             view_id = _insert_analysis_view(connection)
             connection.execute(
@@ -590,6 +637,87 @@ def test_exact_state_inventories_reject_unknown_values(
 ) -> None:
     with pytest.raises(IntegrityError), postgres_engine.begin() as connection:
         connection.execute(table.insert().values(**values))
+
+
+@pytest.mark.parametrize(
+    ("provider", "schema_id", "raw_digest"),
+    [
+        (
+            "github",
+            "github-steward.github-webhook-delivery/v1",
+            None,
+        ),
+        (
+            "synthetic",
+            "github-steward.synthetic-delivery",
+            "a" * 64,
+        ),
+        (
+            "github",
+            "github-steward.github-webhook-delivery/v1",
+            "not-a-sha256",
+        ),
+    ],
+)
+def test_raw_payload_digest_is_exactly_scoped_to_gs_i6_webhook_rows(
+    postgres_engine: Engine,
+    provider: str,
+    schema_id: str,
+    raw_digest: str | None,
+) -> None:
+    with pytest.raises(IntegrityError), postgres_engine.begin() as connection:
+        connection.execute(
+            delivery_inbox.insert().values(
+                delivery_id=uuid4(),
+                provider=provider,
+                provider_delivery_id=str(uuid4()),
+                payload_digest=DIGEST,
+                raw_payload_digest=raw_digest,
+                received_at=NOW,
+                payload_schema_id=schema_id,
+                payload_schema_version=1,
+                canonical_payload={"safe": True},
+                payload_digest_format="jcs-sha256/v1",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "work_type",
+    ["REFRESH_GITHUB_REPOSITORY", "REFRESH_GITHUB_AUTHORIZATION"],
+)
+def test_exact_gs_i6_work_types_are_accepted(
+    postgres_engine: Engine,
+    work_type: str,
+) -> None:
+    with postgres_engine.begin() as connection:
+        delivery_id = _insert_delivery(connection, work_type.lower())
+        connection.execute(
+            work_record.insert().values(
+                work_record_id=uuid4(),
+                delivery_id=delivery_id,
+                work_type=work_type,
+                state="AVAILABLE",
+                available_at=NOW,
+            )
+        )
+
+
+def test_unknown_work_type_remains_rejected(postgres_engine: Engine) -> None:
+    with postgres_engine.begin() as connection:
+        delivery_id = _insert_delivery(connection, "unknown-work-type")
+        nested = connection.begin_nested()
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                work_record.insert().values(
+                    work_record_id=uuid4(),
+                    delivery_id=delivery_id,
+                    work_type="UNAUTHORIZED_WORK",
+                    state="AVAILABLE",
+                    available_at=NOW,
+                )
+            )
+        nested.rollback()
 
 
 def test_sqlalchemy_row_mapping_cannot_cross_canonical_boundary(

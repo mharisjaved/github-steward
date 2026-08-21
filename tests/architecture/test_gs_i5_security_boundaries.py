@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import subprocess
 import tomllib
 from collections.abc import Iterator
 
@@ -11,6 +12,7 @@ from github_steward.adapters.postgres.metadata import metadata
 
 ROOT = pathlib.Path(__file__).parents[2]
 SRC = ROOT / "src" / "github_steward"
+GS_I5_ACCEPTED_CANDIDATE = "578cdd7c65c35b1dff517785392297ea15e7c3ae"
 BROKER_OWNED_MARKERS = frozenset(
     {
         "broker",
@@ -180,7 +182,14 @@ def test_github_mutation_verbs_are_absent_except_control_plane_token_post() -> N
 
 
 def test_gs_i5_adds_no_server_or_oauth_runtime_dependency() -> None:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    baseline_pyproject = subprocess.run(
+        ["git", "show", f"{GS_I5_ACCEPTED_CANDIDATE}:pyproject.toml"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    project = tomllib.loads(baseline_pyproject)
     assert project["project"]["scripts"] == {
         "github-steward": "github_steward.cli:main"
     }

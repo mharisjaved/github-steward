@@ -1,0 +1,151 @@
+# AFEF v0.2.0 High Assurance GS-I6 implementation work record.
+# This record captures a later external Product Owner authorization. It does
+# not rewrite the historically correct GS-I5 statement that GS-I6 was not
+# authorized by the earlier GS-I5 closeout.
+schema_version: "0.2.0"
+work_id: "GS-I6"
+related_specifications:
+  - "SPEC-0001"
+  - "SPEC-0002"
+  - "SPEC-0003"
+  - "SPEC-0004"
+  - "SPEC-0005"
+  - "SPEC-0006"
+  - "SPEC-0007"
+risk_profile: high_assurance
+scope:
+  in_scope:
+    - "Implement POST /webhooks/github as bounded Starlette/ASGI ingress with exact-byte HMAC-SHA256 verification, strict parsing, trusted GS-I5 authorization gating, zero-or-one durable refresh work, append-only SecurityEventV1, and atomic PostgreSQL acknowledgement from exact baseline 71af3d1967175d5f44127de8259535854ba19c13 and tree 8c034cab99d93150f0b4ae64366635760139629a."
+    - "Add only migration gs_i6_0005, preserve migrations 0001 through 0004 byte-for-byte, and validate upgrade, downgrade, re-upgrade, replay, concurrency, rollback, append-only security history, and all earlier PostgreSQL persistence behavior on disposable local PostgreSQL 16."
+    - "Add only starlette and uvicorn as direct dependency families, change no more than 50 authorized paths, create exactly one local implementation commit with the authorized subject, and build the non-overwriting implementation-01 evidence package for independent Implementation Supervisor review."
+  out_of_scope:
+    - "Live GitHub API access, a real GitHub webhook endpoint, GitHub connector use, real GitHub App credentials, GitHub acquisition inside ingress, any GitHub write, push, pull request, merge, tag, release, deployment, production, or remote repository mutation."
+    - "GS-I7 coalescing, timers, worker daemon, reconciliation, periodic polling, message brokers, Redis, Celery, FastAPI, webhook SDKs, or another direct dependency family."
+    - "Changing historical GS-I1 through GS-I5 lifecycle truth, modifying .afef/project-manifest.yaml under the current path envelope, changing GS-I5 credential authority, or treating webhook payload content as trusted authorization or preparedness evidence."
+authorization_envelope:
+  operations:
+    - operation_id: "OP-GS-I6-LOCAL-READS"
+      effect_class: local-read
+      decision: permitted
+      authorization_requirement: bounded_work_envelope
+      description: "Read the exact accepted repository, frozen local dependency state, accepted historical AFEF records, private local test configuration without disclosure, and secret-redacted validation output."
+    - operation_id: "OP-GS-I6-IMPLEMENTATION-WRITES"
+      effect_class: local-reversible-write
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Modify at most 50 authorized GS-I6 paths, create exactly one local implementation commit, and write the non-overwriting persistent implementation-01 evidence package."
+    - operation_id: "OP-GS-I6-DISPOSABLE-DATABASES"
+      effect_class: local-destructive
+      decision: permitted
+      authorization_requirement: separate_reference
+      description: "Create, migrate, downgrade, re-upgrade, and remove only harness-designated disposable local PostgreSQL 16 databases without changing role grants."
+    - operation_id: "OP-GS-I6-LIVE-GITHUB-READS"
+      effect_class: external-read
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "Every live GitHub API request, connector call, real webhook operation, remote Git read, and real GitHub App access is prohibited."
+    - operation_id: "OP-GS-I6-REMOTE-REPOSITORY-WRITES"
+      effect_class: external-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "Push, pull request, merge, tag, remote branch change, release, and every other remote repository mutation are prohibited."
+    - operation_id: "OP-GS-I6-PRODUCT-GITHUB-WRITES"
+      effect_class: external-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "The GS-I6 product boundary may not issue GitHub POST, PATCH, PUT, or DELETE requests or receive Checks, pull-request, or Statuses write authority."
+    - operation_id: "OP-GS-I6-PRODUCTION"
+      effect_class: publication-release
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "Production, deployment, publication, release, and production-readiness claims remain not authorized."
+    - operation_id: "OP-GS-I7-IMPLEMENTATION"
+      effect_class: local-reversible-write
+      decision: prohibited
+      authorization_requirement: not_applicable
+      description: "GS-I7 scheduling amplification resolution, coalescing, worker, timer, and reconciliation implementation are not authorized by GS-I6."
+  authorization_references:
+    - authorization_id: "AUTH-GS-I6-EXTERNAL-KICKOFF"
+      reference: "The externally supplied GS-I6 kickoff/design package, confirmed by the Implementation Supervisor clarification SUPERVISOR CLARIFICATION — GS-I6 PREFLIGHT RESOLUTION and signal GS-I6_PREIMPLEMENTATION_GREEN, records later explicit Product Owner authorization for this exact bounded implementation pass from baseline 71af3d1967175d5f44127de8259535854ba19c13; no second Product Owner authorization is required before implementation."
+      operation_ids:
+        - "OP-GS-I6-IMPLEMENTATION-WRITES"
+        - "OP-GS-I6-DISPOSABLE-DATABASES"
+  affected_paths:
+    - ".afef/specifications/gs-i6-verified-webhook-ingress.md"
+    - ".afef/work-records/gs-i6.yaml"
+    - "migrations/versions/0005_gs_i6_webhook_ingress.py"
+    - "pyproject.toml"
+    - "src/github_steward/adapters/postgres/github_authorization.py"
+    - "src/github_steward/adapters/postgres/metadata.py"
+    - "src/github_steward/adapters/postgres/repositories.py"
+    - "src/github_steward/adapters/postgres/unit_of_work.py"
+    - "src/github_steward/adapters/postgres/webhook.py"
+    - "src/github_steward/adapters/web/__init__.py"
+    - "src/github_steward/adapters/web/github_webhook.py"
+    - "src/github_steward/application/webhook_ingress.py"
+    - "src/github_steward/domain/webhook.py"
+    - "src/github_steward/ports/webhook.py"
+    - "tests/architecture/test_boundaries.py"
+    - "tests/architecture/test_gs_i5_security_boundaries.py"
+    - "tests/architecture/test_gs_i6_webhook_boundaries.py"
+    - "tests/contract/test_webhook_ports.py"
+    - "tests/integration/postgres/test_migrations.py"
+    - "tests/integration/postgres/test_schema_invariants.py"
+    - "tests/integration/postgres/test_webhook_ingress_postgres.py"
+    - "tests/integration/web/test_github_webhook.py"
+    - "tests/unit/adapters/test_webhook_security.py"
+    - "tests/unit/application/test_webhook_ingress.py"
+    - "tests/unit/domain/test_webhook.py"
+    - "tests/unit/infrastructure/test_credential_broker.py"
+    - "uv.lock"
+  constraints:
+    - "Create or use branch gs-i6-verified-webhook-ingress and create exactly one implementation commit with subject feat: add verified GitHub webhook ingress and exact parent 71af3d1967175d5f44127de8259535854ba19c13; do not amend, rebase, squash, or add a correction commit in this pass."
+    - "Enforce bounded raw-body read before header validation, exact-byte HMAC-SHA256 before parsing, constant-time comparison, strict UTF-8 and duplicate-key-rejecting JSON, event/action classification, trusted GS-I5 authorization gating, one PostgreSQL transaction, durable commit, then acknowledgement."
+    - "Accept only X-GitHub-Delivery, X-GitHub-Event, and X-Hub-Signature-256 under the defined boundary; accept only sha256 signatures; default to 8 MiB with a 25 MiB hard ceiling; never retain body, secret, full supplied signature, or expected signature."
+    - "Recognize only ping, installation, installation_repositories, github_app_authorization, pull_request, pull_request_review, check_run, check_suite, and status; issue_comment, unknown events, and unknown actions gain no refresh authority."
+    - "Repository and pull-request work requires current trusted RepositoryAuthorization with exact repository and installation agreement, AUTHORIZED_READ, and write_enabled false; the signed payload never creates trusted authorization or preparedness evidence."
+    - "One provider delivery creates zero or one work; same-digest replay is idempotent; different-digest replay preserves the original and appends WEBHOOK_DELIVERY_INTEGRITY_CONFLICT; concurrency and rollback preserve those invariants."
+    - "SecurityEventV1 remains append-only and secret-safe; unauthenticated input creates no persistent attacker-controlled security event; database failure maps to 503 and success is not acknowledged before commit."
+    - "Preserve GS-I5 broker eligibility exactly: REFRESH_GITHUB_REPOSITORY and REFRESH_GITHUB_AUTHORIZATION cannot mint credentials merely because they exist, and the legacy synthetic worker cannot claim GS-I6 refresh work."
+    - "GS-I6-LIM-001 = ACCEPTED_NON_BLOCKING; distinct valid CI deliveries may each create one repository refresh, at most one per delivery and with no pull-request fan-out; final_resolution = GS-I7."
+    - "Use only synthetic webhook secrets and private local PostgreSQL configuration; do not print, persist, archive, commit, or return secrets, sensitive DSNs, complete signatures, expected signatures, tokens, or private keys."
+    - "Do not modify .afef/project-manifest.yaml under this authorization and do not alter historical GS-I5 statements merely to represent the later GS-I6 authorization."
+  stop_conditions:
+    - "Stop before commit on baseline or parent mismatch, unexplained workspace change, evidence collision, more than 50 changed paths, any unauthorized path, another direct dependency family, accepted migration 0001 through 0004 change, or PostgreSQL 16 lifecycle failure."
+    - "Stop before commit if AFEF validation genuinely requires .afef/project-manifest.yaml to change, and report that exact path-scope conflict without editing the manifest."
+    - "Stop before commit on required live GitHub access, GitHub write permission or request, GS-I5 broker-authority widening, GS-I7 scheduling semantics, secret exposure, unresolved material validation failure, or any other scope expansion."
+deliverables:
+  - "SPEC-0007, this GS-I6 work record, bounded webhook ingress implementation, gs_i6_0005, adversarial and PostgreSQL tests, one local implementation commit, verified candidate bundle, safe non-overwriting evidence archive, traceability report, checksums, and implementation completion record for independent supervisor review."
+implementation_state: in_progress
+implementer:
+  actor_id: "local-ide-agent-gs-i6"
+  role: ide_agent
+validation_summaries:
+  - check: "GS-I6 preimplementation gate"
+    result: passed
+    summary: "The Implementation Supervisor recorded GS-I6_PREIMPLEMENTATION_GREEN for the exact baseline and accepted the IDE Agent's secret-free CPython 3.12.3, uv 0.5.21, PostgreSQL 16.15 disposable lifecycle, offline dependency, migration-head, old-migration-hash, evidence-destination, clean-workspace, and path-feasibility facts."
+  - check: "Final implementation candidate validation"
+    result: not_run
+    summary: "Implementation and iterative local validation are in progress. Exact-candidate static, complete-suite, coverage, AFEF, integrity, secret, bundle, archive, and outer-manifest results will be recorded in the non-overwriting implementation evidence after the single candidate commit is created."
+reviews:
+  - review_id: "GS-I6-IMPLEMENTATION-SUPERVISOR"
+    status: pending
+  - review_id: "GS-I6-HIGH-ASSURANCE-INDEPENDENT-SECURITY-REVIEW"
+    status: pending
+independent_review:
+  status: pending
+final_gate:
+  status: not_issued
+human_checkpoint:
+  status: awaiting
+  owner:
+    actor_id: "github-steward-implementation-supervisor"
+    role: implementation_supervisor
+  next_required_action: "Complete and validate the one-commit local candidate and implementation-01 evidence, then submit the exact candidate to the Implementation Supervisor; integration remains unauthorized pending independent acceptance."
+known_limitations:
+  - "GS-I6-LIM-001 = ACCEPTED_NON_BLOCKING: distinct valid CI deliveries may each create one repository refresh record; final_resolution = GS-I7."
+  - "GS-I6 schedules later verification but implements no worker daemon, coalescing, timers, reconciliation, or periodic polling, and makes no production-readiness claim."
+  - "The webhook signature authorizes scheduling only; webhook payload review, check, status, repository, installation, and authorization claims are not trusted evidence."
+  - "The historical GS-I5 prohibition remains true for the GS-I5 closeout package and is not superseded retroactively; GS-I6 authority comes only from the later external kickoff recorded here."
+  - "Implementation Supervisor review, independent security review, Product Owner exact-candidate acceptance, integration, push, merge, tag, release, deployment, production, and GS-I7 remain pending or not authorized."
+next_action: "Finish the bounded local candidate and persistent evidence, then obtain independent Implementation Supervisor review. Do not integrate, push, open a pull request, merge, tag, deploy, or begin GS-I7 under this work record."

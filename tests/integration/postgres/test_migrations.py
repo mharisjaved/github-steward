@@ -30,7 +30,8 @@ GS_I5_TABLES = {
     "installation_observation",
     "repository_authorization",
 }
-EXPECTED_TABLES = GS_I2_TABLES | GS_I4_TABLES | GS_I5_TABLES
+GS_I6_TABLES = {"security_event"}
+EXPECTED_TABLES = GS_I2_TABLES | GS_I4_TABLES | GS_I5_TABLES | GS_I6_TABLES
 GS_I2_APPEND_ONLY_TABLES = {
     "delivery_inbox",
     "canonical_observation",
@@ -39,8 +40,12 @@ GS_I2_APPEND_ONLY_TABLES = {
     "audit_event",
 }
 GS_I5_APPEND_ONLY_TABLES = {"installation_observation"}
+GS_I6_APPEND_ONLY_TABLES = {"security_event"}
 EXPECTED_APPEND_ONLY_TABLES = (
-    GS_I2_APPEND_ONLY_TABLES | GS_I4_TABLES | GS_I5_APPEND_ONLY_TABLES
+    GS_I2_APPEND_ONLY_TABLES
+    | GS_I4_TABLES
+    | GS_I5_APPEND_ONLY_TABLES
+    | GS_I6_APPEND_ONLY_TABLES
 )
 
 
@@ -83,19 +88,21 @@ def _truncate_application_data(engine: Engine) -> None:
         )
 
 
-def test_exactly_four_linear_revisions_and_one_head() -> None:
+def test_exactly_five_linear_revisions_and_one_head() -> None:
     script = ScriptDirectory.from_config(_config())
     revisions = list(script.walk_revisions())
-    assert len(revisions) == 4
-    assert revisions[0].revision == "gs_i5_0004"
-    assert revisions[0].down_revision == "gs_i4_0003"
-    assert revisions[1].revision == "gs_i4_0003"
-    assert revisions[1].down_revision == "gs_i2_0002"
-    assert revisions[2].revision == "gs_i2_0002"
-    assert revisions[2].down_revision == "gs_i1_0001"
-    assert revisions[3].revision == "gs_i1_0001"
-    assert revisions[3].down_revision is None
-    assert script.get_heads() == ["gs_i5_0004"]
+    assert len(revisions) == 5
+    assert revisions[0].revision == "gs_i6_0005"
+    assert revisions[0].down_revision == "gs_i5_0004"
+    assert revisions[1].revision == "gs_i5_0004"
+    assert revisions[1].down_revision == "gs_i4_0003"
+    assert revisions[2].revision == "gs_i4_0003"
+    assert revisions[2].down_revision == "gs_i2_0002"
+    assert revisions[3].revision == "gs_i2_0002"
+    assert revisions[3].down_revision == "gs_i1_0001"
+    assert revisions[4].revision == "gs_i1_0001"
+    assert revisions[4].down_revision is None
+    assert script.get_heads() == ["gs_i6_0005"]
 
 
 def test_transactional_downgrade_and_reupgrade(
@@ -105,6 +112,22 @@ def test_transactional_downgrade_and_reupgrade(
     assert os.environ["GS_TEST_DATABASE_URL"] == postgres_database_url
     assert _application_tables(postgres_engine) == EXPECTED_TABLES
     assert _append_only_trigger_tables(postgres_engine) == EXPECTED_APPEND_ONLY_TABLES
+    _truncate_application_data(postgres_engine)
+    command.downgrade(_config(), "gs_i5_0004")
+    assert _application_tables(postgres_engine) == (
+        GS_I2_TABLES | GS_I4_TABLES | GS_I5_TABLES
+    )
+    assert _append_only_trigger_tables(postgres_engine) == (
+        GS_I2_APPEND_ONLY_TABLES | GS_I4_TABLES | GS_I5_APPEND_ONLY_TABLES
+    )
+    inspector = sa.inspect(postgres_engine)
+    assert "raw_payload_digest" not in {
+        column["name"] for column in inspector.get_columns("delivery_inbox")
+    }
+    command.upgrade(_config(), "head")
+    assert _application_tables(postgres_engine) == EXPECTED_TABLES
+    assert _append_only_trigger_tables(postgres_engine) == EXPECTED_APPEND_ONLY_TABLES
+
     _truncate_application_data(postgres_engine)
     command.downgrade(_config(), "gs_i4_0003")
     assert _application_tables(postgres_engine) == GS_I2_TABLES | GS_I4_TABLES
@@ -142,7 +165,7 @@ def test_nonempty_inbox_migration_fails_closed_and_can_recover(
             revision = connection.scalar(
                 sa.text("SELECT version_num FROM alembic_version")
             )
-        if revision != "gs_i5_0004":
+        if revision != "gs_i6_0005":
             command.upgrade(_config(), "head")
 
 
@@ -157,3 +180,4 @@ def test_offline_sql_generation_contains_all_revisions(
     assert "Running upgrade gs_i1_0001 -> gs_i2_0002" in output
     assert "Running upgrade gs_i2_0002 -> gs_i4_0003" in output
     assert "Running upgrade gs_i4_0003 -> gs_i5_0004" in output
+    assert "Running upgrade gs_i5_0004 -> gs_i6_0005" in output

@@ -315,6 +315,14 @@ def test_authorization_change_during_mint_fails_closed() -> None:
             _work(work_type="PROCESS_SYNTHETIC_OBSERVATION"),
             BrokerFailureCode.WORK_NOT_AUTHORIZED,
         ),
+        (
+            _work(work_type="REFRESH_GITHUB_REPOSITORY"),
+            BrokerFailureCode.WORK_NOT_AUTHORIZED,
+        ),
+        (
+            _work(work_type="REFRESH_GITHUB_AUTHORIZATION"),
+            BrokerFailureCode.WORK_NOT_AUTHORIZED,
+        ),
     ],
 )
 def test_invalid_or_ineligible_work_never_reaches_token_endpoint(

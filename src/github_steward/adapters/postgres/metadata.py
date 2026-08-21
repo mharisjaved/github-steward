@@ -1,4 +1,4 @@
-"""The bounded eleven-table GS-I4 PostgreSQL metadata model."""
+"""The bounded fourteen-table GS-I6 PostgreSQL metadata model."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ delivery_inbox = sa.Table(
     sa.Column("provider", sa.Text(), nullable=False),
     sa.Column("provider_delivery_id", sa.Text(), nullable=False),
     sa.Column("payload_digest", sa.Text(), nullable=False),
+    sa.Column("raw_payload_digest", sa.Text(), nullable=True),
     sa.Column("received_at", _TIMESTAMP, nullable=False),
     sa.Column("payload_schema_id", sa.Text(), nullable=False),
     sa.Column("payload_schema_version", sa.Integer(), nullable=False),
@@ -43,6 +44,18 @@ delivery_inbox = sa.Table(
     sa.CheckConstraint(
         "payload_digest ~ '^[0-9a-f]{64}$'",
         name="ck_delivery_inbox_payload_digest_sha256",
+    ),
+    sa.CheckConstraint(
+        "raw_payload_digest IS NULL OR raw_payload_digest ~ '^[0-9a-f]{64}$'",
+        name="ck_delivery_inbox_raw_payload_digest_sha256",
+    ),
+    sa.CheckConstraint(
+        "(payload_schema_id = 'github-steward.github-webhook-delivery/v1' "
+        "AND payload_schema_version = 1 AND provider = 'github' "
+        "AND raw_payload_digest IS NOT NULL) OR "
+        "(payload_schema_id <> 'github-steward.github-webhook-delivery/v1' "
+        "AND raw_payload_digest IS NULL)",
+        name="ck_delivery_inbox_webhook_raw_digest",
     ),
     sa.CheckConstraint(
         "payload_schema_id <> ''",
@@ -80,7 +93,9 @@ work_record = sa.Table(
     ),
     sa.UniqueConstraint("delivery_id", name="uq_work_record_delivery"),
     sa.CheckConstraint(
-        "work_type IN ('PROCESS_SYNTHETIC_OBSERVATION', 'REFRESH_GITHUB_PULL_REQUEST')",
+        "work_type IN ('PROCESS_SYNTHETIC_OBSERVATION', "
+        "'REFRESH_GITHUB_PULL_REQUEST', 'REFRESH_GITHUB_REPOSITORY', "
+        "'REFRESH_GITHUB_AUTHORIZATION')",
         name="ck_work_record_work_type_inventory",
     ),
     sa.CheckConstraint(
@@ -757,6 +772,68 @@ sa.Index(
     repository_authorization.c.installation_id,
 )
 
+security_event = sa.Table(
+    "security_event",
+    metadata,
+    sa.Column("security_event_id", _UUID, nullable=False),
+    sa.Column("delivery_id", _UUID, nullable=False),
+    sa.Column("event_kind", sa.Text(), nullable=False),
+    sa.Column("occurred_at", _TIMESTAMP, nullable=False),
+    sa.Column("schema_id", sa.Text(), nullable=False),
+    sa.Column("schema_version", sa.Integer(), nullable=False),
+    sa.Column("canonical_metadata", _JSONB, nullable=False),
+    sa.Column("digest_format", sa.Text(), nullable=False),
+    sa.Column("digest_value", sa.Text(), nullable=False),
+    sa.Column("inserted_at", _TIMESTAMP, nullable=False, server_default=_NOW),
+    sa.PrimaryKeyConstraint(
+        "security_event_id",
+        name="pk_security_event",
+    ),
+    sa.ForeignKeyConstraint(
+        ["delivery_id"],
+        ["delivery_inbox.delivery_id"],
+        name="fk_security_event_delivery",
+    ),
+    sa.CheckConstraint(
+        "event_kind IN ("
+        "'WEBHOOK_DELIVERY_INTEGRITY_CONFLICT', "
+        "'WEBHOOK_SIGNED_SCHEMA_INVALID', "
+        "'WEBHOOK_SIGNED_IDENTITY_MISMATCH', "
+        "'WEBHOOK_AUTHORIZATION_CONTEXT_MISMATCH', "
+        "'WEBHOOK_PERMISSION_CEILING_MISMATCH')",
+        name="ck_security_event_kind_inventory",
+    ),
+    sa.CheckConstraint(
+        "schema_id = 'github-steward.security-event/v1'",
+        name="ck_security_event_schema_id",
+    ),
+    sa.CheckConstraint(
+        "schema_version = 1",
+        name="ck_security_event_schema_version",
+    ),
+    sa.CheckConstraint(
+        "jsonb_typeof(canonical_metadata) = 'object'",
+        name="ck_security_event_metadata_object",
+    ),
+    sa.CheckConstraint(
+        "octet_length(canonical_metadata::text) <= 4096",
+        name="ck_security_event_metadata_bounded",
+    ),
+    sa.CheckConstraint(
+        "digest_format = 'jcs-sha256/v1'",
+        name="ck_security_event_digest_format",
+    ),
+    sa.CheckConstraint(
+        "digest_value ~ '^[0-9a-f]{64}$'",
+        name="ck_security_event_digest_value",
+    ),
+)
+sa.Index(
+    "ix_security_event_delivery_occurrence",
+    security_event.c.delivery_id,
+    security_event.c.occurred_at,
+)
+
 TABLE_NAMES: Final = (
     "delivery_inbox",
     "work_record",
@@ -771,6 +848,7 @@ TABLE_NAMES: Final = (
     "preparedness_assessment_evidence",
     "installation_observation",
     "repository_authorization",
+    "security_event",
 )
 APPEND_ONLY_TABLE_NAMES: Final = (
     "delivery_inbox",
@@ -782,6 +860,7 @@ APPEND_ONLY_TABLE_NAMES: Final = (
     "preparedness_assessment",
     "preparedness_assessment_evidence",
     "installation_observation",
+    "security_event",
 )
 
 assert tuple(metadata.tables) == TABLE_NAMES
